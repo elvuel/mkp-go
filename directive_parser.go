@@ -17,17 +17,21 @@ var (
 	_ RawDirectiveOutputParser = (*RawDirective_sn)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_list_dir)(nil)
 
-	InstantRawDirective_sn       = NewRawDirective_sn()
-	InstantRawDirective_list_dir = NewRawDirective_list_dir()
-	InstantRawDirective_alive    = NewRawDirective_alive()
-	InstantRawDirective_atime    = NewRawDirective_atime()
-	InstantRawDirective_aversion = NewRawDirective_aversion()
+	InstantRawDirective_sn          = NewRawDirective_sn()
+	InstantRawDirective_list_dir    = NewRawDirective_list_dir()
+	InstantRawDirective_clean_dir   = NewRawDirective_clean_dir()
+	InstantRawDirective_alive       = NewRawDirective_alive()
+	InstantRawDirective_atime       = NewRawDirective_atime()
+	InstantRawDirective_aversion    = NewRawDirective_aversion()
+	InstantRawDirective_delete_file = NewRawDirective_delete_file()
 )
 
 func InitParsers() {
 	parsers := []RawDirectiveOutputParser{
 		InstantRawDirective_sn,
 		InstantRawDirective_list_dir,
+		InstantRawDirective_clean_dir,
+		InstantRawDirective_delete_file,
 		InstantRawDirective_alive,
 		InstantRawDirective_atime,
 		InstantRawDirective_aversion,
@@ -147,6 +151,68 @@ func (r *RawDirective_list_dir) Parse(cli, data string) (string, error) {
 
 	if len(data) > 0 {
 		return data, nil
+	}
+
+	return "", nil
+}
+
+// clean_dir 指令
+type RawDirective_clean_dir struct {
+	*RawDirective
+	Name string
+}
+
+func NewRawDirective_clean_dir() *RawDirective_clean_dir {
+	return &RawDirective_clean_dir{Name: "clean_dir", RawDirective: &RawDirective{JSONOutput: false}}
+}
+
+func (r *RawDirective_clean_dir) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_clean_dir) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+
+	// E (2055915) sdcard: Failed to open directory: No such file or directory
+	if strings.Contains(data, "Failed to") {
+		return "", errors.New("failed to clean directory")
+	}
+
+	return "", nil
+}
+
+// delete_file 指令
+type RawDirective_delete_file struct {
+	*RawDirective
+	Name string
+}
+
+func NewRawDirective_delete_file() *RawDirective_delete_file {
+	return &RawDirective_delete_file{Name: "delete_file", RawDirective: &RawDirective{JSONOutput: false}}
+}
+
+func (r *RawDirective_delete_file) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_delete_file) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+
+	// E (2055915) sdcard: Failed to remove /eMMC/applog/mkpdemo/1111.log: No such file or directory
+	if strings.Contains(data, "Failed to remove") {
+		return "", errors.New("failed to remove file")
 	}
 
 	return "", nil

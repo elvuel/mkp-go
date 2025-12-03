@@ -2,6 +2,7 @@ package helper
 
 import (
 	"errors"
+	"strings"
 
 	usbcom "github.com/elvuel/mkp-go"
 )
@@ -60,6 +61,107 @@ func ListDir(sfport *usbcom.SFSerialPort, path string) (*usbcom.FileSystem, erro
 	}
 
 	return nil, usbcom.ErrDirectiveParserMissing
+}
+
+func ComposeLogDirctory(logDir string) string {
+	if !strings.HasPrefix(logDir, "/eMMC/applog") {
+		return "/eMMC/applog/" + logDir
+	}
+
+	return logDir
+}
+
+func CleanDir(sfport *usbcom.SFSerialPort, path string) error {
+	if !strings.HasPrefix(path, "/eMMC/applog") {
+		return errors.New("only can clean directory in working directory") // only can delete file within /eMMC/applog
+	}
+
+	if !sfport.SyncOuputEnabled {
+		return errors.New("please enable sync mode first")
+	}
+
+	directive := "clean_dir " + path
+
+	result, err := sfport.SendDirective(directive)
+
+	if err != nil {
+		return err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		_, err := parser.Parse(directive, result)
+
+		if err != nil {
+			return err
+		}
+
+		return nil
+
+		// if parser.IsJSONOutput() {
+		// 	fssys := &usbcom.FileSystem{}
+		// 	err = parser.UnmarshalTo(parsedResult, fssys)
+		// 	if fssys.Error != "" {
+		// 		return nil, errors.New(fssys.Error)
+		// 	}
+		// 	return fssys, err
+		// }
+	}
+
+	return usbcom.ErrDirectiveParserMissing
+}
+
+func ComposeLogFullpath(logPath string) string {
+	if !strings.HasSuffix(logPath, ".log") {
+		logPath += ".log"
+	}
+
+	if !strings.HasPrefix(logPath, "/eMMC/applog") {
+		return "/eMMC/applog/" + logPath
+	}
+
+	return logPath
+}
+
+// DeleteFile 指令 只能删除在/eMMC/applog下的文件(path 路径)
+func DeleteFile(sfport *usbcom.SFSerialPort, path string) error {
+	path = ComposeLogFullpath(path)
+
+	if !strings.HasPrefix(path, "/eMMC/applog") {
+		return errors.New("only can delete file in working directory") // only can delete file within /eMMC/applog
+	}
+
+	if !sfport.SyncOuputEnabled {
+		return errors.New("please enable sync mode first")
+	}
+
+	directive := "delete_file " + path
+
+	result, err := sfport.SendDirective(directive)
+
+	if err != nil {
+		return err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		_, err := parser.Parse(directive, result)
+
+		if err != nil {
+			return err
+		}
+
+		return nil
+
+		// if parser.IsJSONOutput() {
+		// 	fssys := &usbcom.FileSystem{}
+		// 	err = parser.UnmarshalTo(parsedResult, fssys)
+		// 	if fssys.Error != "" {
+		// 		return nil, errors.New(fssys.Error)
+		// 	}
+		// 	return fssys, err
+		// }
+	}
+
+	return usbcom.ErrDirectiveParserMissing
 }
 
 // Alive 指令 心跳时间戳

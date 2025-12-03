@@ -56,16 +56,10 @@ func (sp *SFSerialPort) SendDirectiveAsync(directive string) error {
 	if sp.Verbose {
 		log.Printf("准备执行指令: %s\n", directive)
 	}
-	// _, err := sp.Write([]byte(directive + "\r\n"))
-	// return err
-	go func() {
-		sp.withAsyncMark = true
-		_, err := sp.Write([]byte(directive + "\r\n"))
-		if err != nil {
-			log.Printf("执行指令: %s , 错误： %s\n", directive, err)
-		}
-	}()
-	return nil
+
+	sp.withAsyncMark = true
+	_, err := sp.Write([]byte(directive + "\r\n"))
+	return err
 }
 
 func (sp *SFSerialPort) GetRawDirective(directive string) string {
