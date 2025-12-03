@@ -23,3 +23,8 @@ type LogLength struct {
 	Seconds    int `json:"seconds"`
 	Milseconds int `json:"milsec"`
 }
+
+type MKPVersion struct {
+	UVersion string `json:"uver"`
+	AVersion string `json:"aver"`
+}
