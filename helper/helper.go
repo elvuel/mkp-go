@@ -6,6 +6,7 @@ import (
 	usbcom "github.com/elvuel/mkp-go"
 )
 
+// DeviceSN 指令 返回设备序列号
 func DeviceSN(sfport *usbcom.SFSerialPort) (string, error) {
 	if !sfport.SyncOuputEnabled {
 		return "", errors.New("please enable sync mode first")
@@ -26,6 +27,7 @@ func DeviceSN(sfport *usbcom.SFSerialPort) (string, error) {
 	return result, usbcom.ErrDirectiveParserMissing
 }
 
+// ListDir 指令 返回路径下的所有子目录及文件
 func ListDir(sfport *usbcom.SFSerialPort, path string) (*usbcom.FileSystem, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
@@ -60,6 +62,7 @@ func ListDir(sfport *usbcom.SFSerialPort, path string) (*usbcom.FileSystem, erro
 	return nil, usbcom.ErrDirectiveParserMissing
 }
 
+// Alive 指令 心跳时间戳
 func Alive(sfport *usbcom.SFSerialPort) (*usbcom.Heartbeat, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
@@ -94,6 +97,7 @@ func Alive(sfport *usbcom.SFSerialPort) (*usbcom.Heartbeat, error) {
 	return nil, usbcom.ErrDirectiveParserMissing
 }
 
+// Atime 指令 返回 日志时长。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
 func Atime(sfport *usbcom.SFSerialPort, path string) (*usbcom.LogLength, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
