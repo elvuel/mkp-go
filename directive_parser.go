@@ -20,6 +20,7 @@ var (
 	InstantRawDirective_sn       = NewRawDirective_sn()
 	InstantRawDirective_list_dir = NewRawDirective_list_dir()
 	InstantRawDirective_alive    = NewRawDirective_alive()
+	InstantRawDirective_atime    = NewRawDirective_atime()
 )
 
 func InitParsers() {
@@ -27,6 +28,7 @@ func InitParsers() {
 		InstantRawDirective_sn,
 		InstantRawDirective_list_dir,
 		InstantRawDirective_alive,
+		InstantRawDirective_atime,
 	}
 
 	for _, parser := range parsers {
@@ -173,6 +175,40 @@ func (r *RawDirective_alive) Parse(cli, data string) (string, error) {
 
 	if len(data) > 0 {
 		return data, nil
+	}
+
+	return "", nil
+}
+
+// atime 指令
+type RawDirective_atime struct {
+	*RawDirective
+	Name string
+}
+
+func NewRawDirective_atime() *RawDirective_atime {
+	return &RawDirective_atime{Name: "atime", RawDirective: &RawDirective{JSONOutput: true}}
+}
+
+func (r *RawDirective_atime) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_atime) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "{") && strings.Contains(line, `"seconds":`) {
+			return line, nil
+		}
 	}
 
 	return "", nil

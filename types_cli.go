@@ -18,3 +18,8 @@ type FileSystem struct {
 type Heartbeat struct {
 	Timetamp int64 `json:"timetamp"`
 }
+
+type LogLength struct {
+	Seconds    int `json:"seconds"`
+	Milseconds int `json:"milsec"`
+}
