@@ -24,18 +24,19 @@ type SerialPort struct {
 	MousePortFlag    string `json:"mouse_port_flag"`
 	KeyboardPortFlag string `json:"keyboard_port_flag"`
 
-	Verbose   bool         `json:"verbose"`
-	OpenMode  *serial.Mode `json:"-"`
-	port      serial.Port  `json:"-"`
-	readerBuf []byte
+	Verbose  bool         `json:"verbose"`
+	OpenMode *serial.Mode `json:"-"`
+	port     serial.Port  `json:"-"`
 
-	readClosed bool `json:"-"`
-
-	locker sync.Mutex
-
+	locker           sync.Mutex
 	SyncDirective    string
 	SyncOuputEnabled bool `json:"sync_output_enabled"`
 	SyncOutputChan   chan string
+
+	withAsyncMark bool // 同步输出状态下，任然支持“异步”
+
+	readerBuf  []byte
+	readClosed bool `json:"-"`
 }
 
 func NewSerialPort() *SerialPort {
@@ -139,7 +140,7 @@ func (sp *SerialPort) Read_V0() (string, error) {
 
 func (sp *SerialPort) Read() (string, error) {
 
-	result := make([]byte, 0)
+	resultCache := make([]byte, 0)
 	var n int
 	var err error
 	for {
@@ -162,19 +163,24 @@ func (sp *SerialPort) Read() (string, error) {
 			}
 
 			if sp.SyncOuputEnabled {
-				result = append(result, sp.readerBuf[:n]...)
+				if !sp.withAsyncMark {
+					resultCache = append(resultCache, sp.readerBuf[:n]...)
 
-				hittedIdx := bytes.Index(result, []byte(sp.SyncDirective))
+					hittedIdx := bytes.Index(resultCache, []byte(sp.SyncDirective))
 
-				if hittedIdx >= 0 {
-					// looking for cli> after hittedIdx
-					cliIdx := bytes.Index(result[hittedIdx:], []byte("cli>"))
-					if cliIdx >= 0 {
-						sp.SyncOutputChan <- string(result[hittedIdx : hittedIdx+cliIdx])
-						// clear the result to empty
-						sp.SyncDirective = ""
-						result = result[:0]
+					if hittedIdx >= 0 {
+						// looking for cli> after hittedIdx
+						cliIdx := bytes.Index(resultCache[hittedIdx:], []byte("cli>"))
+						if cliIdx >= 0 {
+							sp.SyncOutputChan <- string(resultCache[hittedIdx : hittedIdx+cliIdx])
+							// clear the result to empty
+							sp.SyncDirective = ""
+							resultCache = resultCache[:0]
+						}
 					}
+				} else { // 如果是“异步”标识， 无条件直清空cache
+					resultCache = resultCache[:0]
+					sp.withAsyncMark = false // 重置
 				}
 			}
 		}
