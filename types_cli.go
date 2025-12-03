@@ -14,3 +14,7 @@ type FileSystem struct {
 	RootDir FileNode `json:"rootDir,omitempty"` // 根目录节点（eMMC）
 	Error   string   `json:"error,omitempty"`   // 错误信息
 }
+
+type Heartbeat struct {
+	Timetamp int64 `json:"timetamp"`
+}

@@ -8,6 +8,7 @@ import (
 
 var (
 	RawDirectiveOutputParsers      = make(map[string]RawDirectiveOutputParser)
+	ErrDirectiveParserMissing      = errors.New("directive parser missing")
 	ErrRawDirectiveParseFailed     = errors.New("raw directive parse failed")
 	ErrRawDirecitveExecutionFailed = errors.New("raw directive execution failed")
 )
@@ -18,11 +19,19 @@ var (
 
 	InstantRawDirective_sn       = NewRawDirective_sn()
 	InstantRawDirective_list_dir = NewRawDirective_list_dir()
+	InstantRawDirective_alive    = NewRawDirective_alive()
 )
 
 func InitParsers() {
-	RegisterRawDirectiveOutputParser(InstantRawDirective_sn)
-	RegisterRawDirectiveOutputParser(InstantRawDirective_list_dir)
+	parsers := []RawDirectiveOutputParser{
+		InstantRawDirective_sn,
+		InstantRawDirective_list_dir,
+		InstantRawDirective_alive,
+	}
+
+	for _, parser := range parsers {
+		RegisterRawDirectiveOutputParser(parser)
+	}
 }
 
 func GetRawDirective(directive string) string {
@@ -109,6 +118,7 @@ func (r *RawDirective_sn) Parse(_, data string) (string, error) {
 	return "", ErrRawDirectiveParseFailed
 }
 
+// list_dir 指令
 type RawDirective_list_dir struct {
 	*RawDirective
 	Name string
@@ -123,6 +133,36 @@ func (r *RawDirective_list_dir) String() string {
 }
 
 func (r *RawDirective_list_dir) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+
+	if len(data) > 0 {
+		return data, nil
+	}
+
+	return "", nil
+}
+
+// alive 指令
+type RawDirective_alive struct {
+	*RawDirective
+	Name string
+}
+
+func NewRawDirective_alive() *RawDirective_alive {
+	return &RawDirective_alive{Name: "alive", RawDirective: &RawDirective{JSONOutput: true}}
+}
+
+func (r *RawDirective_alive) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_alive) Parse(cli, data string) (string, error) {
 	data, err := r.PreFlight(data)
 	if err != nil {
 		return "", err

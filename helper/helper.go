@@ -23,7 +23,7 @@ func DeviceSN(sfport *usbcom.SFSerialPort) (string, error) {
 		return parser.Parse(directive, result)
 	}
 
-	return result, nil
+	return result, usbcom.ErrDirectiveParserMissing
 }
 
 func ListDir(sfport *usbcom.SFSerialPort, path string) (*usbcom.FileSystem, error) {
@@ -57,5 +57,39 @@ func ListDir(sfport *usbcom.SFSerialPort, path string) (*usbcom.FileSystem, erro
 
 	}
 
-	return nil, nil
+	return nil, usbcom.ErrDirectiveParserMissing
+}
+
+func Alive(sfport *usbcom.SFSerialPort) (*usbcom.Heartbeat, error) {
+	if !sfport.SyncOuputEnabled {
+		return nil, errors.New("please enable sync mode first")
+	}
+
+	directive := "alive"
+
+	result, err := sfport.SendDirective(directive)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		parsedResult, err := parser.Parse(directive, result)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if parser.IsJSONOutput() {
+			hb := &usbcom.Heartbeat{}
+			err = parser.UnmarshalTo(parsedResult, hb)
+			if err != nil {
+				return nil, err
+			}
+			return hb, nil
+		}
+
+	}
+
+	return nil, usbcom.ErrDirectiveParserMissing
 }
