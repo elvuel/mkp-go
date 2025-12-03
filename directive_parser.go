@@ -24,17 +24,19 @@ var (
 	InstantRawDirective_atime       = NewRawDirective_atime()
 	InstantRawDirective_aversion    = NewRawDirective_aversion()
 	InstantRawDirective_delete_file = NewRawDirective_delete_file()
+	InstantRawDirective_ainsp       = NewRawDirective_ainsp()
 )
 
 func InitParsers() {
 	parsers := []RawDirectiveOutputParser{
 		InstantRawDirective_sn,
 		InstantRawDirective_list_dir,
-		InstantRawDirective_clean_dir,
 		InstantRawDirective_delete_file,
-		InstantRawDirective_alive,
-		InstantRawDirective_atime,
+		InstantRawDirective_clean_dir,
 		InstantRawDirective_aversion,
+		InstantRawDirective_atime,
+		InstantRawDirective_alive,
+		InstantRawDirective_ainsp,
 	}
 
 	for _, parser := range parsers {
@@ -307,6 +309,40 @@ func (r *RawDirective_aversion) Parse(cli, data string) (string, error) {
 
 	if len(data) > 0 {
 		return data, nil
+	}
+
+	return "", nil
+}
+
+// ainsp 指令 返回log基础信息
+type RawDirective_ainsp struct {
+	*RawDirective
+	Name string
+}
+
+func NewRawDirective_ainsp() *RawDirective_ainsp {
+	return &RawDirective_ainsp{Name: "ainsp", RawDirective: &RawDirective{JSONOutput: true}}
+}
+
+func (r *RawDirective_ainsp) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_ainsp) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "{") && strings.Contains(line, `"seconds":`) && strings.Contains(line, `"width":`) {
+			return line, nil
+		}
 	}
 
 	return "", nil

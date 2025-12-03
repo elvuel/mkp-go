@@ -19,9 +19,22 @@ type Heartbeat struct {
 	Timetamp int64 `json:"timetamp"`
 }
 
+type LogBasicOption struct {
+	// "width":0, "heigh":0, "stpos": {"x":-1,"y":-1 }
+	Width  int `json:"width"`
+	Height int `json:"heigh"`
+	StPos  struct {
+		X int `json:"x"`
+		Y int `json:"y"`
+	} `json:"stpos"`
+}
+
+type LogInfo struct {
+	LogBasicOption
+	LogLength
+}
+
 type LogLength struct {
-	Seconds    int `json:"seconds"`
-	Milseconds int `json:"milsec"`
 }
 
 type MKPVersion struct {

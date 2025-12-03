@@ -268,3 +268,38 @@ func Aversion(sfport *usbcom.SFSerialPort) (*usbcom.MKPVersion, error) {
 
 	return nil, usbcom.ErrDirectiveParserMissing
 }
+
+// AInspect 指令 返回 日志基础信息。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
+func AInspect(sfport *usbcom.SFSerialPort, path string) (*usbcom.LogInfo, error) {
+	if !sfport.SyncOuputEnabled {
+		return nil, errors.New("please enable sync mode first")
+	}
+
+	directive := "ainsp " + path
+
+	result, err := sfport.SendDirective(directive)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		parsedResult, err := parser.Parse(directive, result)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if parser.IsJSONOutput() {
+			o := &usbcom.LogInfo{}
+			err = parser.UnmarshalTo(parsedResult, o)
+			if err != nil {
+				return nil, err
+			}
+			return o, nil
+		}
+
+	}
+
+	return nil, usbcom.ErrDirectiveParserMissing
+}
