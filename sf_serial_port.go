@@ -76,11 +76,11 @@ func (sp *SFSerialPort) GetSyncOutput() (string, error) {
 	return <-sp.SyncOutputChan, nil
 }
 
-func (sp *SFSerialPort) StartRecording(logName string) error {
+func (sp *SFSerialPort) StartRecording(args string) error {
 	directives := make([]string, 0)
 	directives = append(directives, "alog")
 
-	directives = append(directives, logName)
+	directives = append(directives, args)
 
 	return sp.SendDirectiveAsync(strings.Join(directives, " "))
 }

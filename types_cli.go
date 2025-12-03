@@ -1,5 +1,9 @@
 package mkpgo
 
+import (
+	"fmt"
+)
+
 type FileNode struct {
 	DisplayName string     `json:"displayName,omitempty"` // 显示名称（友好的名称）
 	Name        string     `json:"name"`                  // 节点名称（文件名/目录名）
@@ -27,6 +31,24 @@ type LogBasicOption struct {
 		X int `json:"x"`
 		Y int `json:"y"`
 	} `json:"stpos"`
+}
+
+func (opt *LogBasicOption) CliArgs() []string {
+	// alog --width 1920 --heigh 1024 --stposx 300 --stposy 300 circle3
+	args := make([]string, 0)
+	if opt.Width > 0 {
+		args = append(args, "--width", fmt.Sprintf("%d", opt.Width))
+	}
+	if opt.Height > 0 {
+		args = append(args, "--heigh", fmt.Sprintf("%d", opt.Height))
+	}
+	if opt.StPos.X > -1 {
+		args = append(args, "--stposx", fmt.Sprintf("%d", opt.StPos.X))
+	}
+	if opt.StPos.Y > -1 {
+		args = append(args, "--stposy", fmt.Sprintf("%d", opt.StPos.Y))
+	}
+	return args
 }
 
 type LogInfo struct {

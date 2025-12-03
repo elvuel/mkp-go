@@ -7,6 +7,24 @@ import (
 	usbcom "github.com/elvuel/mkp-go"
 )
 
+func StartRecord(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogBasicOption) error {
+	args := make([]string, 0)
+	if opt != nil {
+		args = append(args, opt.CliArgs()...)
+	}
+
+	args = append(args, logName)
+	return sfport.StartRecording(strings.Join(args, " "))
+}
+
+func StopRecord(sfport *usbcom.SFSerialPort) error {
+	return sfport.StopRecording()
+}
+
+func Cancel(sfport *usbcom.SFSerialPort) error {
+	return sfport.CancelReplay()
+}
+
 // DeviceSN 指令 返回设备序列号
 func DeviceSN(sfport *usbcom.SFSerialPort) (string, error) {
 	if !sfport.SyncOuputEnabled {
