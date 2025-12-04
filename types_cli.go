@@ -23,7 +23,7 @@ type Heartbeat struct {
 	Timetamp int64 `json:"timetamp"`
 }
 
-type LogBasicOption struct {
+type LogOption struct {
 	// "width":0, "heigh":0, "stpos": {"x":-1,"y":-1 }
 	Width  int `json:"width"`
 	Height int `json:"heigh"`
@@ -33,7 +33,7 @@ type LogBasicOption struct {
 	} `json:"stpos"`
 }
 
-func (opt *LogBasicOption) CliArgs() []string {
+func (opt *LogOption) CliArgs() []string {
 	// alog --width 1920 --heigh 1024 --stposx 300 --stposy 300 circle3
 	args := make([]string, 0)
 	if opt.Width > 0 {
@@ -52,7 +52,7 @@ func (opt *LogBasicOption) CliArgs() []string {
 }
 
 type LogInfo struct {
-	LogBasicOption
+	LogOption
 	LogLength
 }
 

@@ -7,7 +7,7 @@ import (
 	usbcom "github.com/elvuel/mkp-go"
 )
 
-func StartRecord(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogBasicOption) error {
+func StartRecord(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogOption) error {
 	args := make([]string, 0)
 	if opt != nil {
 		args = append(args, opt.CliArgs()...)
