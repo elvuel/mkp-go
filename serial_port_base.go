@@ -80,7 +80,7 @@ func (sp *SerialPort) Read_V0() (string, error) {
 			if err != nil {
 				if strings.Contains(err.Error(), "Port has been closed") {
 					sp.readClosed = true
-					log.Println("串口已关闭")
+					// log.Println("串口已关闭")
 				} else {
 					log.Printf("读取错误: %v\n", err)
 				}
@@ -120,7 +120,7 @@ func (sp *SerialPort) Read_V0() (string, error) {
 		if err != nil {
 			if strings.Contains(err.Error(), "Port has been closed") {
 				sp.readClosed = true
-				log.Println("串口已关闭")
+				// log.Println("串口已关闭")
 			} else {
 				log.Printf("读取错误: %v\n", err)
 			}
@@ -149,7 +149,9 @@ func (sp *SerialPort) Read() (string, error) {
 		if err != nil {
 			if strings.Contains(err.Error(), "Port has been closed") {
 				sp.readClosed = true
-				log.Println("串口已关闭")
+				if sp.Verbose {
+					log.Println("串口已关闭")
+				}
 			} else {
 				log.Printf("读取错误: %v\n", err)
 			}
@@ -159,7 +161,7 @@ func (sp *SerialPort) Read() (string, error) {
 		if n > 0 {
 			// 处理接收到的数据
 			if sp.Verbose {
-				fmt.Printf("收到数据: %q\n", sp.readerBuf[:n])
+				log.Printf("收到数据: %q\n", sp.readerBuf[:n])
 			}
 
 			if sp.SyncOuputEnabled {

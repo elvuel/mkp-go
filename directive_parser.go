@@ -3,7 +3,6 @@ package mkpgo
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -153,7 +152,6 @@ func (r *RawDirective_sn) Parse(cli, data string) (string, error) {
 	data = strings.TrimPrefix(data, cli)
 
 	if len(data) > 0 {
-		fmt.Println(data)
 		return data, nil
 	}
 
