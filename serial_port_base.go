@@ -179,7 +179,6 @@ func (sp *SerialPort) Read() (string, error) {
 						}
 					}
 				} else { // 如果是“异步”标识， 无条件直清空cache
-					log.Println("got async mark")
 					resultCache = resultCache[:0]
 					sp.withAsyncMark = false // 重置
 				}

@@ -36,7 +36,11 @@ func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
 		log.Printf("准备执行指令: %s\n", directive)
 	}
 	if sp.SyncOuputEnabled {
-		sp.SetSyncDirective(directive)
+		if strings.HasPrefix(directive, "alog") { // FIXME: monkey patch; as  alog  `I (136594) alog: logfile /eMMC/applog/guijidashi/r111.log`
+			sp.SetSyncDirective("alog")
+		} else {
+			sp.SetSyncDirective(directive)
+		}
 		_, err := sp.Write([]byte(directive + "\r\n"))
 		if err != nil {
 			log.Printf("执行指令: %s , 错误： %s\n", directive, err)

@@ -25,6 +25,8 @@ var (
 	InstantRawDirective_aversion    = NewRawDirective_aversion()
 	InstantRawDirective_delete_file = NewRawDirective_delete_file()
 	InstantRawDirective_ainsp       = NewRawDirective_ainsp()
+	InstantRawDirective_astop       = NewRawDirective_astop()
+	InstantRawDirective_alog        = NewRawDirective_alog()
 )
 
 func InitParsers() {
@@ -37,6 +39,8 @@ func InitParsers() {
 		InstantRawDirective_atime,
 		InstantRawDirective_alive,
 		InstantRawDirective_ainsp,
+		InstantRawDirective_astop,
+		InstantRawDirective_alog,
 	}
 
 	for _, parser := range parsers {
@@ -96,6 +100,33 @@ func (r *RawDirective) IsJSONOutput() bool {
 }
 
 /* 以下是指令解析列表 */
+
+// astop 指令
+type RawDirective_astop struct {
+	*RawDirective
+	Name string
+}
+
+func NewRawDirective_astop() *RawDirective_astop {
+	return &RawDirective_astop{Name: "astop", RawDirective: &RawDirective{}}
+}
+
+func (r *RawDirective_astop) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_astop) Parse(_, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	if len(data) > 0 {
+		return data, nil
+	}
+
+	return "", ErrRawDirectiveParseFailed
+}
 
 // sn 指令
 type RawDirective_sn struct {
@@ -343,6 +374,36 @@ func (r *RawDirective_ainsp) Parse(cli, data string) (string, error) {
 		if strings.HasPrefix(line, "{") && strings.Contains(line, `"seconds":`) && strings.Contains(line, `"width":`) {
 			return line, nil
 		}
+	}
+
+	return "", nil
+}
+
+// alog 指令 返回log基础信息
+type RawDirective_alog struct {
+	*RawDirective
+	Name string
+}
+
+func NewRawDirective_alog() *RawDirective_alog {
+	return &RawDirective_alog{Name: "alog", RawDirective: &RawDirective{JSONOutput: false}}
+}
+
+func (r *RawDirective_alog) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_alog) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+
+	if len(data) > 0 {
+		return data, nil
 	}
 
 	return "", nil

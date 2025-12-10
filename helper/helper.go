@@ -7,6 +7,10 @@ import (
 	usbcom "github.com/elvuel/mkp-go"
 )
 
+func StopRecord(sfport *usbcom.SFSerialPort) error {
+	return sfport.StopRecording()
+}
+
 func StartRecord(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogOption) error {
 	args := make([]string, 0)
 	if opt != nil {
@@ -17,8 +21,60 @@ func StartRecord(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogOpt
 	return sfport.StartRecording(strings.Join(args, " "))
 }
 
-func StopRecord(sfport *usbcom.SFSerialPort) error {
-	return sfport.StopRecording()
+func Alog(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogOption) (string, error) {
+	if !sfport.SyncOuputEnabled {
+		return "", errors.New("please enable sync mode first")
+	}
+
+	args := make([]string, 0)
+	if opt != nil {
+		args = append(args, opt.CliArgs()...)
+	}
+
+	args = append(args, logName)
+
+	directive := "alog " + strings.Join(args, " ")
+
+	result, err := sfport.SendDirective(directive)
+
+	// log.Println("got ################ alog response:", result)
+
+	if err != nil {
+		return "", err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		parsedResult, err := parser.Parse(directive, result)
+
+		if err != nil {
+			return "", err
+		}
+
+		return parsedResult, nil
+
+	}
+
+	return "", usbcom.ErrDirectiveParserMissing
+}
+
+func Astop(sfport *usbcom.SFSerialPort) error {
+	if !sfport.SyncOuputEnabled {
+		return errors.New("please enable sync mode first")
+	}
+	directive := "astop"
+
+	result, err := sfport.SendDirective(directive)
+
+	if err != nil {
+		return err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		_, err := parser.Parse(directive, result)
+		return err
+	}
+
+	return usbcom.ErrDirectiveParserMissing
 }
 
 func Cancel(sfport *usbcom.SFSerialPort) error {
