@@ -3,6 +3,7 @@ package mkpgo
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -135,25 +136,25 @@ type RawDirective_sn struct {
 }
 
 func NewRawDirective_sn() *RawDirective_sn {
-	return &RawDirective_sn{Name: "sn", RawDirective: &RawDirective{}}
+	return &RawDirective_sn{Name: "sn", RawDirective: &RawDirective{JSONOutput: true}}
 }
 
 func (r *RawDirective_sn) String() string {
 	return r.Name
 }
 
-func (r *RawDirective_sn) Parse(_, data string) (string, error) {
+func (r *RawDirective_sn) Parse(cli, data string) (string, error) {
 	data, err := r.PreFlight(data)
 	if err != nil {
 		return "", err
 	}
 
-	lines := strings.Split(data, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "sn") && len(line) > 3 {
-			return line[3:], nil
-		}
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+
+	if len(data) > 0 {
+		fmt.Println(data)
+		return data, nil
 	}
 
 	return "", ErrRawDirectiveParseFailed

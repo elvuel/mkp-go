@@ -4,6 +4,10 @@ import (
 	"fmt"
 )
 
+type SN struct {
+	SN string `json:"sn"`
+}
+
 type FileNode struct {
 	DisplayName string     `json:"displayName,omitempty"` // 显示名称（友好的名称）
 	Name        string     `json:"name"`                  // 节点名称（文件名/目录名）

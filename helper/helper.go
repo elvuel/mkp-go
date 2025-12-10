@@ -82,9 +82,9 @@ func Cancel(sfport *usbcom.SFSerialPort) error {
 }
 
 // DeviceSN 指令 返回设备序列号
-func DeviceSN(sfport *usbcom.SFSerialPort) (string, error) {
+func DeviceSN(sfport *usbcom.SFSerialPort) (*usbcom.SN, error) {
 	if !sfport.SyncOuputEnabled {
-		return "", errors.New("please enable sync mode first")
+		return nil, errors.New("please enable sync mode first")
 	}
 
 	directive := "sn"
@@ -92,14 +92,24 @@ func DeviceSN(sfport *usbcom.SFSerialPort) (string, error) {
 	result, err := sfport.SendDirective(directive)
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		return parser.Parse(directive, result)
+		parsedResult, err := parser.Parse(directive, result)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if parser.IsJSONOutput() {
+			sn := &usbcom.SN{}
+			err = parser.UnmarshalTo(parsedResult, sn)
+			return sn, err
+		}
 	}
 
-	return result, usbcom.ErrDirectiveParserMissing
+	return nil, usbcom.ErrDirectiveParserMissing
 }
 
 // ListDir 指令 返回路径下的所有子目录及文件
