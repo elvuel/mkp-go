@@ -57,6 +57,8 @@ type LogInfo struct {
 }
 
 type LogLength struct {
+	Seconds      int `json:"seconds"`
+	Milliseconds int `json:"milsec"`
 }
 
 type MKPVersion struct {
