@@ -127,8 +127,10 @@ func (sp *SFSerialPort) Mouse10(opt *M10Option) error {
 	directives = append(directives, "m10")
 	directives = append(directives, "--port", sp.MousePortFlag)
 	directives = append(directives, opt.ToString())
-	_, err := sp.SendDirective(strings.Join(directives, " "))
-	return err
+	// _, err := sp.SendDirective(strings.Join(directives, " "))
+	// return err
+
+	return sp.SendDirectiveAsync(strings.Join(directives, " "))
 }
 
 func (sp *SFSerialPort) Keypad(opt *KpadOption) error {
@@ -136,6 +138,8 @@ func (sp *SFSerialPort) Keypad(opt *KpadOption) error {
 	directives = append(directives, "kpad")
 	directives = append(directives, "--port", sp.KeyboardPortFlag)
 	directives = append(directives, opt.ToString())
-	_, err := sp.SendDirective(strings.Join(directives, " "))
-	return err
+	// _, err := sp.SendDirective(strings.Join(directives, " "))
+	// return err
+
+	return sp.SendDirectiveAsync(strings.Join(directives, " "))
 }
