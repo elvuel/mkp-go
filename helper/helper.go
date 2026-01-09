@@ -2,16 +2,18 @@ package helper
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+	"time"
 
-	usbcom "github.com/elvuel/mkp-go"
+	mkpgo "github.com/elvuel/mkp-go"
 )
 
-func StopRecord(sfport *usbcom.SFSerialPort) error {
+func StopRecord(sfport *mkpgo.SFSerialPort) error {
 	return sfport.StopRecording()
 }
 
-func StartRecord(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogOption) error {
+func StartRecord(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) error {
 	args := make([]string, 0)
 	if opt != nil {
 		args = append(args, opt.CliArgs()...)
@@ -21,7 +23,7 @@ func StartRecord(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogOpt
 	return sfport.StartRecording(strings.Join(args, " "))
 }
 
-func Alog(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogOption) (string, error) {
+func Alog(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) (string, error) {
 	if !sfport.SyncOuputEnabled {
 		return "", errors.New("please enable sync mode first")
 	}
@@ -54,10 +56,10 @@ func Alog(sfport *usbcom.SFSerialPort, logName string, opt *usbcom.LogOption) (s
 
 	}
 
-	return "", usbcom.ErrDirectiveParserMissing
+	return "", mkpgo.ErrDirectiveParserMissing
 }
 
-func Astop(sfport *usbcom.SFSerialPort) error {
+func Astop(sfport *mkpgo.SFSerialPort) error {
 	if !sfport.SyncOuputEnabled {
 		return errors.New("please enable sync mode first")
 	}
@@ -74,15 +76,15 @@ func Astop(sfport *usbcom.SFSerialPort) error {
 		return err
 	}
 
-	return usbcom.ErrDirectiveParserMissing
+	return mkpgo.ErrDirectiveParserMissing
 }
 
-func Cancel(sfport *usbcom.SFSerialPort) error {
+func Cancel(sfport *mkpgo.SFSerialPort) error {
 	return sfport.CancelReplay()
 }
 
 // DeviceSN 指令 返回设备序列号
-func DeviceSN(sfport *usbcom.SFSerialPort) (*usbcom.SN, error) {
+func DeviceSN(sfport *mkpgo.SFSerialPort) (*mkpgo.SN, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
@@ -103,17 +105,17 @@ func DeviceSN(sfport *usbcom.SFSerialPort) (*usbcom.SN, error) {
 		}
 
 		if parser.IsJSONOutput() {
-			sn := &usbcom.SN{}
+			sn := &mkpgo.SN{}
 			err = parser.UnmarshalTo(parsedResult, sn)
 			return sn, err
 		}
 	}
 
-	return nil, usbcom.ErrDirectiveParserMissing
+	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
 // ListDir 指令 返回路径下的所有子目录及文件
-func ListDir(sfport *usbcom.SFSerialPort, path string) (*usbcom.FileSystem, error) {
+func ListDir(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.FileSystem, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
@@ -134,7 +136,7 @@ func ListDir(sfport *usbcom.SFSerialPort, path string) (*usbcom.FileSystem, erro
 		}
 
 		if parser.IsJSONOutput() {
-			fssys := &usbcom.FileSystem{}
+			fssys := &mkpgo.FileSystem{}
 			err = parser.UnmarshalTo(parsedResult, fssys)
 			if fssys.Error != "" {
 				return nil, errors.New(fssys.Error)
@@ -144,7 +146,7 @@ func ListDir(sfport *usbcom.SFSerialPort, path string) (*usbcom.FileSystem, erro
 
 	}
 
-	return nil, usbcom.ErrDirectiveParserMissing
+	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
 func ComposeLogDirctory(logDir string) string {
@@ -155,7 +157,7 @@ func ComposeLogDirctory(logDir string) string {
 	return logDir
 }
 
-func CleanDir(sfport *usbcom.SFSerialPort, path string) error {
+func CleanDir(sfport *mkpgo.SFSerialPort, path string) error {
 	if !strings.HasPrefix(path, "/eMMC/applog") {
 		return errors.New("only can clean directory in working directory") // only can delete file within /eMMC/applog
 	}
@@ -182,7 +184,7 @@ func CleanDir(sfport *usbcom.SFSerialPort, path string) error {
 		return nil
 
 		// if parser.IsJSONOutput() {
-		// 	fssys := &usbcom.FileSystem{}
+		// 	fssys := &mkpgo.FileSystem{}
 		// 	err = parser.UnmarshalTo(parsedResult, fssys)
 		// 	if fssys.Error != "" {
 		// 		return nil, errors.New(fssys.Error)
@@ -191,7 +193,7 @@ func CleanDir(sfport *usbcom.SFSerialPort, path string) error {
 		// }
 	}
 
-	return usbcom.ErrDirectiveParserMissing
+	return mkpgo.ErrDirectiveParserMissing
 }
 
 func ComposeLogFullpath(logPath string) string {
@@ -207,7 +209,7 @@ func ComposeLogFullpath(logPath string) string {
 }
 
 // DeleteFile 指令 只能删除在/eMMC/applog下的文件(path 路径)
-func DeleteFile(sfport *usbcom.SFSerialPort, path string) error {
+func DeleteFile(sfport *mkpgo.SFSerialPort, path string) error {
 	path = ComposeLogFullpath(path)
 
 	if !strings.HasPrefix(path, "/eMMC/applog") {
@@ -236,7 +238,7 @@ func DeleteFile(sfport *usbcom.SFSerialPort, path string) error {
 		return nil
 
 		// if parser.IsJSONOutput() {
-		// 	fssys := &usbcom.FileSystem{}
+		// 	fssys := &mkpgo.FileSystem{}
 		// 	err = parser.UnmarshalTo(parsedResult, fssys)
 		// 	if fssys.Error != "" {
 		// 		return nil, errors.New(fssys.Error)
@@ -245,11 +247,11 @@ func DeleteFile(sfport *usbcom.SFSerialPort, path string) error {
 		// }
 	}
 
-	return usbcom.ErrDirectiveParserMissing
+	return mkpgo.ErrDirectiveParserMissing
 }
 
 // Alive 指令 心跳时间戳
-func Alive(sfport *usbcom.SFSerialPort) (*usbcom.Heartbeat, error) {
+func Alive(sfport *mkpgo.SFSerialPort) (*mkpgo.Heartbeat, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
@@ -270,7 +272,7 @@ func Alive(sfport *usbcom.SFSerialPort) (*usbcom.Heartbeat, error) {
 		}
 
 		if parser.IsJSONOutput() {
-			hb := &usbcom.Heartbeat{}
+			hb := &mkpgo.Heartbeat{}
 			err = parser.UnmarshalTo(parsedResult, hb)
 			if err != nil {
 				return nil, err
@@ -280,11 +282,11 @@ func Alive(sfport *usbcom.SFSerialPort) (*usbcom.Heartbeat, error) {
 
 	}
 
-	return nil, usbcom.ErrDirectiveParserMissing
+	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
 // Atime 指令 返回 日志时长。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
-func Atime(sfport *usbcom.SFSerialPort, path string) (*usbcom.LogLength, error) {
+func Atime(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogLength, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
@@ -305,7 +307,7 @@ func Atime(sfport *usbcom.SFSerialPort, path string) (*usbcom.LogLength, error) 
 		}
 
 		if parser.IsJSONOutput() {
-			o := &usbcom.LogLength{}
+			o := &mkpgo.LogLength{}
 			err = parser.UnmarshalTo(parsedResult, o)
 			if err != nil {
 				return nil, err
@@ -315,11 +317,11 @@ func Atime(sfport *usbcom.SFSerialPort, path string) (*usbcom.LogLength, error) 
 
 	}
 
-	return nil, usbcom.ErrDirectiveParserMissing
+	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
 // Aversion 指令 返回 版本信息。
-func Aversion(sfport *usbcom.SFSerialPort) (*usbcom.MKPVersion, error) {
+func Aversion(sfport *mkpgo.SFSerialPort) (*mkpgo.MKPVersion, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
@@ -340,7 +342,7 @@ func Aversion(sfport *usbcom.SFSerialPort) (*usbcom.MKPVersion, error) {
 		}
 
 		if parser.IsJSONOutput() {
-			o := &usbcom.MKPVersion{}
+			o := &mkpgo.MKPVersion{}
 			err = parser.UnmarshalTo(parsedResult, o)
 			if err != nil {
 				return nil, err
@@ -350,11 +352,11 @@ func Aversion(sfport *usbcom.SFSerialPort) (*usbcom.MKPVersion, error) {
 
 	}
 
-	return nil, usbcom.ErrDirectiveParserMissing
+	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
 // AInspect 指令 返回 日志基础信息。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
-func AInspect(sfport *usbcom.SFSerialPort, path string) (*usbcom.LogInfo, error) {
+func AInspect(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogInfo, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
@@ -375,7 +377,7 @@ func AInspect(sfport *usbcom.SFSerialPort, path string) (*usbcom.LogInfo, error)
 		}
 
 		if parser.IsJSONOutput() {
-			o := &usbcom.LogInfo{}
+			o := &mkpgo.LogInfo{}
 			err = parser.UnmarshalTo(parsedResult, o)
 			if err != nil {
 				return nil, err
@@ -385,5 +387,53 @@ func AInspect(sfport *usbcom.SFSerialPort, path string) (*usbcom.LogInfo, error)
 
 	}
 
-	return nil, usbcom.ErrDirectiveParserMissing
+	return nil, mkpgo.ErrDirectiveParserMissing
+}
+
+func KeyDown(sfport *mkpgo.SFSerialPort, key string) error {
+	opt := mkpgo.NewKpadOption().WithKeys([]string{key}).WithDelay(0).WithHold()
+	return sfport.Keypad(opt)
+}
+
+// 释放
+func KeyUp(sfport *mkpgo.SFSerialPort, key string) error {
+	opt := mkpgo.NewKpadOption().WithKeys([]string{key}).WithDelay(0).WithAutoRelease()
+	return sfport.Keypad(opt)
+}
+
+// 按下释放
+func KeyTap(sfport *mkpgo.SFSerialPort, keys []string) error {
+	opt := mkpgo.NewKpadOption().WithKeys(keys).WithDelay(0).WithAutoRelease()
+	return sfport.Keypad(opt)
+}
+
+func KeyPress(sfport *mkpgo.SFSerialPort, key string, sleep int) error {
+	return KeyPresses(sfport, []string{key}, sleep)
+}
+
+func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int) error {
+	opt := mkpgo.NewKpadOption().WithKeys(keys).WithDelay(0)
+	if sleep > 0 {
+		opt.WithRelease(sleep)
+	}
+	err := sfport.Keypad(opt)
+	if err != nil {
+		return err
+	}
+	fmt.Println(time.Now().Unix())
+
+	if sleep > 0 {
+		time.Sleep(time.Duration(sleep) * time.Millisecond)
+	}
+	fmt.Println(time.Now().Unix())
+
+	return nil
+}
+
+func KeypadRelease(sfport *mkpgo.SFSerialPort) error {
+	return sfport.Keypad(mkpgo.HidKpadRelease)
+}
+
+func KeypadReleaseAll(sfport *mkpgo.SFSerialPort) error {
+	return sfport.Keypad(mkpgo.HidKpadReleaseAll)
 }

@@ -26,6 +26,9 @@ const (
 	FowardMouseButton        M10Button = 16 // [16-31]
 )
 
+var HidKpadRelease = NewKpadOption().WithDelay(0).WithKey("NONE")
+var HidKpadReleaseAll = NewKpadOption().WithDelay(0).WithRelease(0)
+
 type M10Option struct {
 	Button *int
 	X      *int
