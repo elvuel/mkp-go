@@ -1,0 +1,156 @@
+package main
+
+import (
+	"math"
+	"math/rand"
+	"time"
+
+	mkpgo "github.com/elvuel/mkp-go"
+)
+
+// Point 结构体现在存储相对偏移量
+type Point struct {
+	RelX     float64       // 相对于上一个点的 X 位移
+	RelY     float64       // 相对于上一个点的 Y 位移
+	AbsX     float64       // (保留参考) 当前绝对 X 坐标
+	AbsY     float64       // (保留参考) 当前绝对 Y 坐标
+	Duration time.Duration // 到达该点后的等待时长
+}
+
+type MouseController struct {
+	SpeedMultiplier float64
+	UseOvershoot    bool
+	UsePause        bool
+	UseJitter       bool
+
+	SFPort *mkpgo.SFSerialPort
+}
+
+// NewMouseController 初始化控制器
+func NewMouseController(speed float64, overshoot, pause, jitter bool) *MouseController {
+	return &MouseController{
+		SpeedMultiplier: speed,
+		UseOvershoot:    overshoot,
+		UsePause:        pause,
+		UseJitter:       jitter,
+	}
+}
+
+// generatePath 生成路径并转换为相对偏移量
+func (mc *MouseController) generatePath(start, end [2]float64, totalTime time.Duration, isCorrection bool, lastAbs [2]float64) ([]Point, [2]float64) {
+	adjustedTime := time.Duration(float64(totalTime) * mc.SpeedMultiplier)
+	steps := int(adjustedTime.Milliseconds() / 11)
+	if steps < 5 {
+		steps = 5
+	}
+
+	midX := (start[0] + end[0]) / 2
+	midY := (start[1] + end[1]) / 2
+	ctrlOffset := 35.0
+	if isCorrection {
+		ctrlOffset = 8.0
+	}
+
+	control := [2]float64{
+		midX + rand.NormFloat64()*ctrlOffset,
+		midY + rand.NormFloat64()*ctrlOffset,
+	}
+
+	points := make([]Point, 0, steps)
+	currentAbs := lastAbs // 追踪当前的绝对位置以便计算偏移
+
+	for i := 1; i <= steps; i++ {
+		t := float64(i) / float64(steps)
+		var easedT float64
+		if isCorrection {
+			easedT = 1 - math.Pow(1-t, 2)
+		} else {
+			easedT = -(math.Cos(math.Pi*t) - 1) / 2
+		}
+
+		mt := 1 - easedT
+		// 计算理论绝对坐标
+		targetAbsX := mt*mt*start[0] + 2*easedT*mt*control[0] + easedT*easedT*end[0]
+		targetAbsY := mt*mt*start[1] + 2*easedT*mt*control[1] + easedT*easedT*end[1]
+
+		// 抖动模拟
+		if mc.UseJitter {
+			mag := 0.6
+			if isCorrection {
+				mag = 0.3
+			}
+			targetAbsX += rand.NormFloat64() * mag
+			targetAbsY += rand.NormFloat64() * mag
+		}
+
+		// 计算相对偏移量
+		roundedAbsX := math.Round(targetAbsX)
+		roundedAbsY := math.Round(targetAbsY)
+
+		relX := roundedAbsX - currentAbs[0]
+		relY := roundedAbsY - currentAbs[1]
+
+		interval := time.Duration((float64(adjustedTime.Milliseconds())/float64(steps))+(rand.Float64()*4-2)) * time.Millisecond
+
+		points = append(points, Point{
+			RelX:     relX,
+			RelY:     relY,
+			AbsX:     roundedAbsX,
+			AbsY:     roundedAbsY,
+			Duration: interval,
+		})
+
+		// 更新当前位置
+		currentAbs[0] = roundedAbsX
+		currentAbs[1] = roundedAbsY
+	}
+	return points, currentAbs
+}
+
+// GenerateTrajectory 生成全过程相对位移序列
+func (mc *MouseController) GenerateTrajectory(start, end [2]float64, baseTime time.Duration) []Point {
+	lastAbs := start // 初始绝对位置
+
+	if !mc.UseOvershoot {
+		path, _ := mc.generatePath(start, end, baseTime, false, lastAbs)
+		return path
+	}
+
+	// 计算过冲逻辑
+	angle := math.Atan2(end[1]-start[1], end[0]-start[0])
+	dist := 5.0 + rand.Float64()*10.0
+	fakeEnd := [2]float64{
+		end[0] + math.Cos(angle)*dist,
+		end[1] + math.Sin(angle)*dist,
+	}
+
+	sprintTime := time.Duration(float64(baseTime) * 0.75)
+	correctionTime := time.Duration(float64(baseTime) * 0.25)
+
+	// 第一阶段
+	path1, lastAbs := mc.generatePath(start, fakeEnd, sprintTime, false, lastAbs)
+
+	// 停顿处理
+	if mc.UsePause && len(path1) > 0 {
+		pause := time.Duration(float64(20+rand.Intn(40))*mc.SpeedMultiplier) * time.Millisecond
+		path1[len(path1)-1].Duration += pause
+	}
+
+	// 第二阶段
+	path2, _ := mc.generatePath(fakeEnd, end, correctionTime, true, lastAbs)
+
+	return append(path1, path2...)
+}
+
+// MoveTo 执行移动
+func (mc *MouseController) MoveTo(start, end [2]float64, baseTime time.Duration) {
+	trajectory := mc.GenerateTrajectory(start, end, baseTime)
+	for _, p := range trajectory {
+		// procSetCursorPos.Call(uintptr(int32(p.X)), uintptr(int32(p.Y)))
+		m10Opt := mkpgo.NewM10Option()
+		// m10Opt.SetX(int(p.RelX)).SetY(int(p.RelY)).SetButton(0)
+		m10Opt.SetX(int(p.RelX)).SetY(int(p.RelY)).SetButton(2)
+		mc.SFPort.Mouse10(m10Opt)
+		time.Sleep(p.Duration)
+	}
+}

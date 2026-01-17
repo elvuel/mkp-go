@@ -45,6 +45,13 @@ func NewM10Option() *M10Option {
 	return &M10Option{}
 }
 
+func (opt *M10Option) Reset() {
+	opt.Button = nil
+	opt.X = nil
+	opt.Y = nil
+	opt.Wheel = nil
+}
+
 func (opt *M10Option) SetButton(v int) *M10Option {
 	// 5 bit [0~31], [-16 ~ 15]
 
