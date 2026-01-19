@@ -2,9 +2,7 @@ package helper
 
 import (
 	"errors"
-	"fmt"
 	"strings"
-	"time"
 
 	mkpgo "github.com/elvuel/mkp-go"
 )
@@ -420,12 +418,6 @@ func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(time.Now().Unix())
-
-	if sleep > 0 {
-		time.Sleep(time.Duration(sleep) * time.Millisecond)
-	}
-	fmt.Println(time.Now().Unix())
 
 	return nil
 }
