@@ -94,13 +94,108 @@ type MouseMovementSimulator struct {
 	SFPort *SFSerialPort
 }
 
-func NewMouseController(cfg *MouseMovementSimulatorConfig, overshoot, pause, jitter bool) *MouseMovementSimulator {
+func NewMouseMovementSimulator(cfg *MouseMovementSimulatorConfig, overshoot, pause, jitter bool) *MouseMovementSimulator {
 	return &MouseMovementSimulator{
 		Cfg:          cfg,
 		UseOvershoot: overshoot,
 		UsePause:     pause,
 		UseJitter:    jitter,
 	}
+}
+
+type MouseMovementSimulatorOption func(*MouseMovementSimulator)
+
+func WithBesselOffset(ctrlOffset, correctionOffset float64) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.Cfg.CtrlOffset = ctrlOffset
+		mms.Cfg.CorrectionOffset = correctionOffset
+	}
+}
+
+func WithOvershoot(use bool) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.UseOvershoot = use
+	}
+}
+
+func WithoutOvershoot() MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.UseOvershoot = false
+	}
+}
+
+func WithPause(use bool) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.UsePause = use
+	}
+}
+
+func WithoutPause() MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.UsePause = false
+	}
+}
+
+func WithJitter(use bool) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.UseJitter = use
+	}
+}
+
+func WithoutJitter() MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.UseJitter = false
+	}
+}
+
+func WithSFPort(port *SFSerialPort) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.SFPort = port
+	}
+}
+func WithConfig(cfg *MouseMovementSimulatorConfig) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.Cfg = cfg
+	}
+}
+
+func (mms *MouseMovementSimulator) ApplyOptions(opts ...MouseMovementSimulatorOption) *MouseMovementSimulator {
+	for _, opt := range opts {
+		opt(mms)
+	}
+	return mms
+}
+
+func (mms *MouseMovementSimulator) SetSFPort(port *SFSerialPort) {
+	mms.SFPort = port
+}
+
+func (mms *MouseMovementSimulator) SetConfig(cfg *MouseMovementSimulatorConfig) {
+	mms.Cfg = cfg
+}
+
+func (mms *MouseMovementSimulator) WithOvershoot(use bool) {
+	mms.UseOvershoot = use
+}
+
+func (mms *MouseMovementSimulator) WithoutOvershoot() {
+	mms.UseOvershoot = false
+}
+
+func (mms *MouseMovementSimulator) WithPause(use bool) {
+	mms.UsePause = use
+}
+
+func (mms *MouseMovementSimulator) WithoutPause() {
+	mms.UsePause = false
+}
+
+func (mms *MouseMovementSimulator) WithJitter(use bool) {
+	mms.UseJitter = use
+}
+
+func (mms *MouseMovementSimulator) WithoutJitter() {
+	mms.UseJitter = false
 }
 
 // generatePath 生成路径
@@ -240,12 +335,24 @@ func (mc *MouseMovementSimulator) GenerateTrajectory(start, end [2]float64, base
 }
 
 // MoveTo 执行移动
-func (mc *MouseMovementSimulator) MoveTo(start, end [2]float64, baseTime time.Duration) {
+func (mc *MouseMovementSimulator) MoveTo(button int, start, end [2]float64, baseTime time.Duration) {
+	m10Opt := NewM10Option()
+
+	defer func() {
+		m10Opt.Reset()
+		m10Opt.WithoutButton().SetX(0).SetY(0)
+		mc.SFPort.Mouse10(m10Opt)
+	}()
+
 	trajectory := mc.GenerateTrajectory(start, end, baseTime)
 	for _, p := range trajectory {
-		m10Opt := NewM10Option()
-		// m10Opt.SetX(int(p.RelX)).SetY(int(p.RelY)).SetButton(0)
-		m10Opt.SetX(int(p.RelX)).SetY(int(p.RelY)).SetButton(2)
+		m10Opt.Reset()
+		if button == 0 {
+			m10Opt = m10Opt.WithoutButton()
+		} else {
+			m10Opt = m10Opt.WithButton(button)
+		}
+		m10Opt.SetX(int(p.RelX)).SetY(int(p.RelY))
 		mc.SFPort.Mouse10(m10Opt)
 		time.Sleep(p.Duration)
 	}

@@ -16,6 +16,27 @@ import (
 
 type M10Button int
 
+func (b M10Button) ToString() string {
+	switch b {
+	case ReleaseMouseButton:
+		return "none"
+	case LeftMouseButton:
+		return "left"
+	case RightMouseButton:
+		return "right"
+	case BothLeftRightMouseButton:
+		return "both"
+	case MiddleMouseButton:
+		return "middle"
+	case BackMouseButton:
+		return "backward"
+	case FowardMouseButton:
+		return "forward"
+	default:
+		return ""
+	}
+}
+
 const (
 	ReleaseMouseButton       M10Button = 0
 	LeftMouseButton          M10Button = 1
@@ -43,6 +64,25 @@ type M10Option struct {
 
 func NewM10Option() *M10Option {
 	return &M10Option{}
+}
+
+func CheckMouseButton(btn string) M10Button {
+	switch strings.ToLower(btn) {
+	case "left":
+		return LeftMouseButton
+	case "right":
+		return RightMouseButton
+	case "both":
+		return BothLeftRightMouseButton
+	case "middle":
+		return MiddleMouseButton
+	case "backword":
+		return BackMouseButton
+	case "forword":
+		return FowardMouseButton
+	default:
+		return ReleaseMouseButton
+	}
 }
 
 func (opt *M10Option) Reset() {

@@ -9,10 +9,10 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	mkpgo "github.com/elvuel/mkp-go"
+	"github.com/elvuel/mkp-go/controller"
 	"github.com/elvuel/mkp-go/helper"
 )
 
@@ -76,17 +76,42 @@ func main() {
 	// }
 
 	// 鼠标右键按下 释放
-	m10Opt := mkpgo.NewM10Option().SetButton(1).SetX(0).SetY(0)
-	log.Println("----")
-	time.Sleep(5 * time.Second)
-	sfport.Mouse10(m10Opt)
-	log.Println("----")
-	m10Opt.SetX(100).SetY(100).WithoutButton()
-	sfport.Mouse10(m10Opt)
+	// m10Opt := mkpgo.NewM10Option().SetButton(1).SetX(0).SetY(0)
+	// log.Println("----")
 	// time.Sleep(5 * time.Second)
-	log.Println("----")
-	m10Opt.SetX(0).SetY(0).SetButton(0)
-	sfport.Mouse10(m10Opt)
+	// sfport.Mouse10(m10Opt)
+	// log.Println("----")
+	// m10Opt.SetX(100).SetY(100).WithoutButton()
+	// sfport.Mouse10(m10Opt)
+	// // time.Sleep(5 * time.Second)
+	// log.Println("----")
+	// m10Opt.SetX(0).SetY(0).SetButton(0)
+	// sfport.Mouse10(m10Opt)
+
+	fmt.Println("休眠5秒")
+	time.Sleep(5 * time.Second)
+
+	// sfport.Verbose = true
+	ctrl := controller.NewController(sfport)
+	// fmt.Println("开始双击")
+	// ctrl.MouseClick("left", true, int(time.Millisecond*300))
+
+	// fmt.Println("开始左键按下")
+	// ctrl.MouseDown("left")
+
+	// fmt.Println("开始右击")
+	// ctrl.MouseClick("right")
+
+	// fmt.Println("滚动")
+	// ctrl.MouseScroll("up", 10, -1)
+
+	// fmt.Println("鼠标按下 加滚轮")
+	// ctrl.MouseScrollWithButton("up", 10, "left", int(20*time.Millisecond))
+	// time.Sleep(5 * time.Second)
+	// ctrl.MouseReleaseAll()
+
+	// ctrl.MouseMove("left", 60, 60, 200*time.Millisecond, mkpgo.WithoutOvershoot(), mkpgo.WithoutJitter(), mkpgo.WithoutPause())
+	ctrl.MouseMove("left", 60, 60, 200*time.Millisecond, mkpgo.WithBesselOffset(2.0, 1.0))
 }
 
 func KeyDown(key string) error {

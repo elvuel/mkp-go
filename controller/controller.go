@@ -1,18 +1,27 @@
 package controller
 
 import (
+	"math/rand"
+	"time"
+
 	mkpgo "github.com/elvuel/mkp-go"
 	"github.com/elvuel/mkp-go/helper"
 )
 
 type Controller struct {
-	sfport *mkpgo.SFSerialPort
+	sfport        *mkpgo.SFSerialPort
+	MouseMovement *mkpgo.MouseMovementSimulator
 }
 
 func NewController(sfport *mkpgo.SFSerialPort) *Controller {
-	return &Controller{
-		sfport: sfport,
+	ctrl := &Controller{
+		sfport:        sfport,
+		MouseMovement: mkpgo.NewMouseMovementSimulator(mkpgo.DefaultMouseMovementSimulatorConfig(), true, true, true),
 	}
+
+	ctrl.MouseMovement.SetSFPort(sfport)
+
+	return ctrl
 }
 
 func (c *Controller) Open() error {
@@ -131,4 +140,156 @@ func (c *Controller) KeypadRelease() error {
 // helper func KeypadReleaseAll(sfport *mkpgo.SFSerialPort) error
 func (c *Controller) KeypadReleaseAll() error {
 	return helper.KeypadReleaseAll(c.sfport)
+}
+
+// MouseClick
+// MouseClick("left|right|both|middle|backword|forword", true)
+func (c *Controller) MouseClick(args ...interface{}) {
+	opt := mkpgo.NewM10Option()
+
+	var button int
+	button = int(mkpgo.LeftMouseButton)
+	var double bool
+	var sleepInterval int
+
+	if len(args) > 0 {
+		button = int(mkpgo.CheckMouseButton(args[0].(string)))
+	}
+
+	if len(args) > 1 {
+		double = args[1].(bool)
+	}
+
+	if len(args) > 2 {
+		sleepInterval = args[2].(int)
+	}
+
+	opt.WithButton(button).SetX(0).SetY(0)
+	c.sfport.Mouse10(opt)
+
+	opt.Reset()
+	c.sfport.Mouse10(opt.SetX(0).SetY(0).WithoutButton())
+
+	if double {
+		if sleepInterval > 0 {
+			time.Sleep(time.Duration(sleepInterval))
+		} else {
+			// rand(50 - 150) + 1
+			time.Sleep(time.Duration(rand.Intn(50)+100+1) * time.Millisecond)
+		}
+		opt.WithButton(button).SetX(0).SetY(0)
+		c.sfport.Mouse10(opt)
+
+		opt.Reset()
+		c.sfport.Mouse10(opt.SetX(0).SetY(0).WithoutButton())
+	}
+}
+
+// 直接滚轮滚动
+// sleepInterval 为次滚轮间间隔, -1 使用随机间隔
+func (c *Controller) MouseScroll(dir string, steps int, sleepInterval int) error {
+	opt := mkpgo.NewM10Option()
+
+	mult := 1
+	if dir == "up" {
+		mult = 1
+	} else {
+		mult = -1
+	}
+
+	for i := 1; i <= steps; i++ {
+		opt = opt.SetX(0).SetY(0).SetWheel(mult)
+		c.sfport.Mouse10(opt)
+
+		time.Sleep(8 * time.Millisecond) // 配合硬件规格8ms
+
+		opt.Reset()
+		c.sfport.Mouse10(opt.SetX(0).SetY(0).WithoutButton())
+
+		if steps > 1 {
+			if sleepInterval > 0 {
+				time.Sleep(time.Duration(sleepInterval))
+			} else {
+				// rand(50 - 150) + 1
+				time.Sleep(time.Duration(rand.Intn(50)+100+1) * time.Millisecond)
+			}
+		}
+	}
+
+	return nil
+}
+
+// 鼠标键按下 滚轮滚动
+// sleepInterval 为次滚轮间间隔, -1 使用随机间隔
+func (c *Controller) MouseScrollWithButton(dir string, steps int, button string, sleepInterval int) error {
+	opt := mkpgo.NewM10Option()
+
+	mult := 1
+	if dir == "up" {
+		mult = 1
+	} else {
+		mult = -1
+	}
+
+	if button != "" {
+		c.MouseDown(button)
+	}
+
+	for i := 1; i <= steps; i++ {
+		opt = opt.SetX(0).SetY(0).SetWheel(mult)
+
+		c.sfport.Mouse10(opt)
+
+		time.Sleep(8 * time.Millisecond) // 配合硬件规格8ms
+
+		if button == "" {
+			opt.Reset()
+			c.sfport.Mouse10(opt.SetX(0).SetY(0).WithoutButton())
+		}
+
+		if steps > 1 {
+			if sleepInterval > 0 {
+				time.Sleep(time.Duration(sleepInterval))
+			} else {
+				// rand(50 - 150) + 1
+				time.Sleep(time.Duration(rand.Intn(50)+100+1) * time.Millisecond)
+			}
+		}
+	}
+
+	if button != "" {
+		c.MouseReleaseAll()
+	}
+
+	return nil
+}
+
+func (c *Controller) MouseDown(button string) error {
+	opt := mkpgo.NewM10Option()
+	opt.WithButton(int(mkpgo.CheckMouseButton(button))).SetX(0).SetY(0)
+	c.sfport.Mouse10(opt)
+	return nil
+}
+
+func (c *Controller) MouseReleaseAll() error {
+	opt := mkpgo.NewM10Option()
+	opt.WithoutButton().SetX(0).SetY(0)
+	c.sfport.Mouse10(opt)
+	return nil
+}
+
+func (c *Controller) MouseUp() error {
+	return c.MouseReleaseAll()
+}
+
+// MouseMove  Move the mouse to the specified position relative to the current position.
+// button is the name of the mouse button to press while moving.
+// relX and relY are the relative X and Y coordinates to move to.
+// interval is the time to take to move to the new position.
+func (c *Controller) MouseMove(button string, relX, relY int, interval time.Duration, opts ...mkpgo.MouseMovementSimulatorOption) error {
+	if len(opts) > 0 {
+		c.MouseMovement.ApplyOptions(opts...)
+	}
+	c.MouseMovement.MoveTo(int(mkpgo.CheckMouseButton(button)), [2]float64{0, 0}, [2]float64{float64(relX), float64(relY)}, interval)
+	return nil
 }
