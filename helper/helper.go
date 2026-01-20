@@ -410,7 +410,84 @@ func KeyPress(sfport *mkpgo.SFSerialPort, key string, sleep int) error {
 }
 
 func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int) error {
-	opt := mkpgo.NewKpadOption().WithKeys(keys).WithDelay(0)
+	applyKeys := make([]string, 0)
+
+	for _, key := range keys {
+		switch key {
+		case "!":
+			applyKeys = append(applyKeys, "mod_lshift", "1")
+		case "@":
+			applyKeys = append(applyKeys, "mod_lshift", "2")
+		case "#":
+			applyKeys = append(applyKeys, "mod_lshift", "3")
+		case "$":
+			applyKeys = append(applyKeys, "mod_lshift", "4")
+		case "%":
+			applyKeys = append(applyKeys, "mod_lshift", "5")
+		case "^":
+			applyKeys = append(applyKeys, "mod_lshift", "6")
+		case "&":
+			applyKeys = append(applyKeys, "mod_lshift", "7")
+		case "*":
+			applyKeys = append(applyKeys, "mod_lshift", "8")
+		case "(":
+			applyKeys = append(applyKeys, "mod_lshift", "9")
+		case ")":
+			applyKeys = append(applyKeys, "mod_lshift", "0")
+		case " ":
+			applyKeys = append(applyKeys, "space")
+		case "-":
+			applyKeys = append(applyKeys, "minus")
+		case "_":
+			applyKeys = append(applyKeys, "mod_lshift", "minus")
+		case "=":
+			applyKeys = append(applyKeys, "equal")
+		case "+":
+			applyKeys = append(applyKeys, "mod_lshift", "equal")
+		case "[":
+			applyKeys = append(applyKeys, "leftbracket")
+		case "{":
+			applyKeys = append(applyKeys, "mod_lshift", "leftbracket")
+		case "]":
+			applyKeys = append(applyKeys, "rightbracket")
+		case "}":
+			applyKeys = append(applyKeys, "mod_lshift", "rightbracket")
+		case "\\":
+			applyKeys = append(applyKeys, "backslash")
+		case "|":
+			applyKeys = append(applyKeys, "mod_lshift", "backslash")
+		// case "~":
+		// 	applyKeys = append(applyKeys, "mod_lshift", "hashtilde")
+		case ";":
+			applyKeys = append(applyKeys, "semicolon")
+		case ":":
+			applyKeys = append(applyKeys, "mod_lshift", "semicolon")
+		case "'":
+			applyKeys = append(applyKeys, "apostrophe")
+		case "\"":
+			applyKeys = append(applyKeys, "mod_lshift", "apostrophe")
+		case "`":
+			applyKeys = append(applyKeys, "grave")
+		case "~":
+			applyKeys = append(applyKeys, "mod_lshift", "grave")
+		case ",":
+			applyKeys = append(applyKeys, "comma")
+		case "<":
+			applyKeys = append(applyKeys, "mod_lshift", "comma")
+		case ".":
+			applyKeys = append(applyKeys, "dot")
+		case ">":
+			applyKeys = append(applyKeys, "mod_lshift", "dot")
+		case "/":
+			applyKeys = append(applyKeys, "slash")
+		case "?":
+			applyKeys = append(applyKeys, "mod_lshift", "slash")
+		default:
+			applyKeys = append(applyKeys, key)
+		}
+	}
+
+	opt := mkpgo.NewKpadOption().WithKeys(applyKeys).WithDelay(0)
 	if sleep > 0 {
 		opt.WithRelease(sleep)
 	}
