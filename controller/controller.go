@@ -24,6 +24,13 @@ func NewController(sfport *mkpgo.SFSerialPort) *Controller {
 	return ctrl
 }
 
+func (c *Controller) BindSFPort(port *mkpgo.SFSerialPort) {
+	c.sfport = port
+	if c.MouseMovement != nil {
+		c.MouseMovement.SetSFPort(port)
+	}
+}
+
 func (c *Controller) Open() error {
 	return c.sfport.Open()
 }
