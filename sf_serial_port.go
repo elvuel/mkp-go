@@ -133,6 +133,12 @@ func (sp *SFSerialPort) Mouse10(opt *M10Option) error {
 	return sp.SendDirectiveAsync(strings.Join(directives, " "))
 }
 
+func (sp *SFSerialPort) MouseReleaseAll() error {
+	btnReleaseOpt := &M10Option{}
+	btnReleaseOpt.SetButton(0)
+	return sp.Mouse10(btnReleaseOpt)
+}
+
 func (sp *SFSerialPort) Keypad(opt *KpadOption) error {
 	directives := make([]string, 0)
 	directives = append(directives, "kpad")

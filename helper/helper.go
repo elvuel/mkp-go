@@ -506,3 +506,7 @@ func KeypadRelease(sfport *mkpgo.SFSerialPort) error {
 func KeypadReleaseAll(sfport *mkpgo.SFSerialPort) error {
 	return sfport.Keypad(mkpgo.HidKpadReleaseAll)
 }
+
+func MouseReleaseAll(sfport *mkpgo.SFSerialPort) error {
+	return sfport.MouseReleaseAll()
+}
