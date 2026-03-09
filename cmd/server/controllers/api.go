@@ -219,7 +219,7 @@ func (a *API) handleAlog(c *gin.Context) {
 	}
 
 	alogID := xid.New().String()
-	if err := a.mkpCtrl.StartRecord(req.LogName, req.logOption()); err != nil {
+	if err := a.mkpCtrl.StartRecord(alogID, req.logOption()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
