@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -118,6 +119,7 @@ func (a *API) RegisterRoutes(router *gin.Engine) {
 	if !(a.auth.MuteInDebug && gin.Mode() == gin.DebugMode) {
 		protected.Use(a.jwtAuthMiddleware())
 	}
+	protected.GET("/list", a.handleList)
 	protected.POST("/alog", a.handleAlog)
 	protected.POST("/astop", a.handleAstop)
 }
@@ -303,6 +305,44 @@ func (a *API) handleAstop(c *gin.Context) {
 		resp["persist_error"] = "missing alog session state"
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+func (a *API) handleList(c *gin.Context) {
+	limits := 10
+	if raw := strings.TrimSpace(c.Query("limits")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			limits = 10
+		}
+		if parsed > 10 {
+			limits = 10
+		}
+	}
+
+	if a.db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": "database is not initialized",
+		})
+		return
+	}
+
+	records := make([]models.MacroRecord, 0, limits)
+	if err := a.db.Order("created_at DESC").Limit(limits).Find(&records).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":        true,
+		"directive": "list",
+		"limits":    limits,
+		"count":     len(records),
+		"records":   records,
+	})
 }
 
 func (a *API) persistMacroRecord(session *alogSession) (*models.MacroRecord, error) {
