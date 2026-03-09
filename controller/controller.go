@@ -13,6 +13,13 @@ type Controller struct {
 	MouseMovement *mkpgo.MouseMovementSimulator
 }
 
+func sleepMs(ms int) {
+	if ms <= 0 {
+		return
+	}
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+}
+
 func NewController(sfport *mkpgo.SFSerialPort) *Controller {
 	ctrl := &Controller{
 		sfport:        sfport,
@@ -179,7 +186,7 @@ func (c *Controller) MouseClick(args ...interface{}) {
 
 	if double {
 		if sleepInterval > 0 {
-			time.Sleep(time.Duration(sleepInterval))
+			sleepMs(sleepInterval)
 		} else {
 			// rand(50 - 150) + 1
 			time.Sleep(time.Duration(rand.Intn(50)+100+1) * time.Millisecond)
@@ -215,7 +222,7 @@ func (c *Controller) MouseScroll(dir string, steps int, sleepInterval int) error
 
 		if steps > 1 {
 			if sleepInterval > 0 {
-				time.Sleep(time.Duration(sleepInterval))
+				sleepMs(sleepInterval)
 			} else {
 				// rand(50 - 150) + 1
 				time.Sleep(time.Duration(rand.Intn(50)+100+1) * time.Millisecond)
@@ -256,7 +263,7 @@ func (c *Controller) MouseScrollWithButton(dir string, steps int, button string,
 
 		if steps > 1 {
 			if sleepInterval > 0 {
-				time.Sleep(time.Duration(sleepInterval))
+				sleepMs(sleepInterval)
 			} else {
 				// rand(50 - 150) + 1
 				time.Sleep(time.Duration(rand.Intn(50)+100+1) * time.Millisecond)
@@ -294,9 +301,23 @@ func (c *Controller) MouseUp() error {
 // relX and relY are the relative X and Y coordinates to move to.
 // interval is the time to take to move to the new position.
 func (c *Controller) MouseMove(button string, relX, relY int, interval time.Duration, opts ...mkpgo.MouseMovementSimulatorOption) error {
-	if len(opts) > 0 {
-		c.MouseMovement.ApplyOptions(opts...)
+	base := c.MouseMovement
+	if base == nil {
+		base = mkpgo.NewMouseMovementSimulator(mkpgo.DefaultMouseMovementSimulatorConfig(), true, true, true)
 	}
-	c.MouseMovement.MoveTo(int(mkpgo.CheckMouseButton(button)), [2]float64{0, 0}, [2]float64{float64(relX), float64(relY)}, interval)
+
+	callMovement := *base
+	if base.Cfg != nil {
+		cfg := *base.Cfg
+		callMovement.Cfg = &cfg
+	} else {
+		callMovement.Cfg = mkpgo.DefaultMouseMovementSimulatorConfig()
+	}
+	callMovement.SetSFPort(c.sfport)
+
+	if len(opts) > 0 {
+		callMovement.ApplyOptions(opts...)
+	}
+	callMovement.MoveTo(int(mkpgo.CheckMouseButton(button)), [2]float64{0, 0}, [2]float64{float64(relX), float64(relY)}, interval)
 	return nil
 }

@@ -6,12 +6,10 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"go.bug.st/serial"
 )
-
-// - v20250926-5
-// - v20250930
 
 type SerialPort struct {
 	Name      string `json:"name"`
@@ -28,15 +26,17 @@ type SerialPort struct {
 	OpenMode *serial.Mode `json:"-"`
 	port     serial.Port  `json:"-"`
 
-	locker           sync.Mutex
-	SyncDirective    string
-	SyncOuputEnabled bool `json:"sync_output_enabled"`
-	SyncOutputChan   chan string
+	locker            sync.Mutex
+	syncStateMu       sync.RWMutex
+	SyncDirective     string
+	SyncOuputEnabled  bool `json:"sync_output_enabled"`
+	SyncOutputChan    chan string
+	SyncOutputTimeout time.Duration `json:"sync_output_timeout"`
 
-	withAsyncMark bool // 同步输出状态下，任然支持“异步”
-
-	readerBuf  []byte
-	readClosed bool `json:"-"`
+	withAsyncMark bool
+	asyncMarkAt   time.Time
+	readerBuf     []byte
+	readClosed    bool `json:"-"`
 }
 
 func NewSerialPort() *SerialPort {
@@ -44,20 +44,35 @@ func NewSerialPort() *SerialPort {
 }
 
 func (sp *SerialPort) Open() error {
+	sp.locker.Lock()
+	defer sp.locker.Unlock()
+
 	if sp.port != nil {
 		return nil
 	}
+
 	var err error
 	sp.port, err = serial.Open(sp.Name, sp.OpenMode)
+	if err == nil {
+		sp.readClosed = false
+	}
 	return err
 }
 
 func (sp *SerialPort) Close() error {
-	if sp.port != nil {
-		return sp.port.Close()
+	sp.locker.Lock()
+	defer sp.locker.Unlock()
+
+	if sp.port == nil {
+		return nil
 	}
 
-	return nil
+	err := sp.port.Close()
+	sp.port = nil
+	sp.readClosed = true
+	sp.EmptySyncDirective()
+	sp.clearAsyncMark()
+	return err
 }
 
 func (sp *SerialPort) String() string {
@@ -65,134 +80,90 @@ func (sp *SerialPort) String() string {
 }
 
 func (sp *SerialPort) Write(data []byte) (int, error) {
+	if sp.port == nil {
+		return 0, fmt.Errorf("serial port %s is not open", sp.Name)
+	}
 	return sp.port.Write(data)
 }
 
 func (sp *SerialPort) Read_V0() (string, error) {
-
-	if sp.SyncOuputEnabled {
-		result := make([]byte, 0)
-		var n int
-		var err error
-		for {
-			// 从串口读取数据
-			n, err = sp.port.Read(sp.readerBuf)
-			if err != nil {
-				if strings.Contains(err.Error(), "Port has been closed") {
-					sp.readClosed = true
-					// log.Println("串口已关闭")
-				} else {
-					log.Printf("读取错误: %v\n", err)
-				}
-				break // 遇到EOF或其他错误时退出循环
-			}
-
-			if n > 0 {
-				// 处理接收到的数据
-				if sp.Verbose {
-					fmt.Printf("收到数据: %q\n", sp.readerBuf[:n])
-				}
-
-				result = append(result, sp.readerBuf[:n]...)
-
-				hittedIdx := bytes.Index(result, []byte(sp.SyncDirective))
-
-				if hittedIdx >= 0 {
-					// looking for cli> after hittedIdx
-					cliIdx := bytes.Index(result[hittedIdx:], []byte("cli>"))
-					if cliIdx >= 0 {
-						sp.SyncOutputChan <- string(result[hittedIdx : hittedIdx+cliIdx])
-
-						sp.EmptySyncDirective()
-						result = result[:0]
-					}
-				}
-			}
-		}
-	}
-
-	result := ""
-	var n int
-	var err error
-	for {
-		// 从串口读取数据
-		n, err = sp.port.Read(sp.readerBuf)
-		if err != nil {
-			if strings.Contains(err.Error(), "Port has been closed") {
-				sp.readClosed = true
-				// log.Println("串口已关闭")
-			} else {
-				log.Printf("读取错误: %v\n", err)
-			}
-			break // 遇到EOF或其他错误时退出循环
-		}
-
-		if n > 0 {
-			// 处理接收到的数据
-			if sp.Verbose {
-				fmt.Printf("收到数据: %q\n", sp.readerBuf[:n])
-			}
-		}
-	}
-
-	return result, err
+	return sp.Read()
 }
 
 func (sp *SerialPort) Read() (string, error) {
-
 	resultCache := make([]byte, 0)
-	var n int
-	var err error
+
 	for {
-		// 从串口读取数据
-		n, err = sp.port.Read(sp.readerBuf)
+		sp.locker.Lock()
+		port := sp.port
+		sp.locker.Unlock()
+		if port == nil {
+			return "", nil
+		}
+
+		n, err := port.Read(sp.readerBuf)
 		if err != nil {
 			if strings.Contains(err.Error(), "Port has been closed") {
 				sp.readClosed = true
 				if sp.Verbose {
-					log.Println("串口已关闭")
+					log.Println("serial port closed")
 				}
 			} else {
-				log.Printf("读取错误: %v\n", err)
+				log.Printf("read error: %v\n", err)
 			}
-			break // 遇到EOF或其他错误时退出循环
+			return "", err
 		}
 
-		if n > 0 {
-			// 处理接收到的数据
-			if sp.Verbose {
-				log.Printf("收到数据: %q\n", sp.readerBuf[:n])
-			}
-
-			if sp.SyncOuputEnabled {
-				if !sp.withAsyncMark {
-					resultCache = append(resultCache, sp.readerBuf[:n]...)
-
-					hittedIdx := bytes.Index(resultCache, []byte(sp.SyncDirective))
-
-					if hittedIdx >= 0 {
-						// looking for cli> after hittedIdx
-						cliIdx := bytes.Index(resultCache[hittedIdx:], []byte("cli>"))
-						if cliIdx >= 0 {
-							sp.SyncOutputChan <- string(resultCache[hittedIdx : hittedIdx+cliIdx])
-							// clear the result to empty
-							sp.SyncDirective = ""
-							resultCache = resultCache[:0]
-						}
-					}
-				} else { // 如果是“异步”标识， 无条件直清空cache
-					resultCache = resultCache[:0]
-					sp.withAsyncMark = false // 重置
-				}
-			}
+		if n <= 0 {
+			continue
 		}
+
+		if sp.Verbose {
+			log.Printf("received data: %q\n", sp.readerBuf[:n])
+		}
+
+		if !sp.IsSyncOutputEnabled() {
+			continue
+		}
+
+		if sp.consumeAsyncMark() {
+			resultCache = resultCache[:0]
+			continue
+		}
+
+		syncDirective := sp.GetSyncDirective()
+		if syncDirective == "" {
+			continue
+		}
+
+		resultCache = append(resultCache, sp.readerBuf[:n]...)
+
+		hittedIdx := bytes.Index(resultCache, []byte(syncDirective))
+		if hittedIdx < 0 {
+			continue
+		}
+
+		cliIdx := bytes.Index(resultCache[hittedIdx:], []byte("cli>"))
+		if cliIdx < 0 {
+			continue
+		}
+
+		sp.SyncOutputChan <- string(resultCache[hittedIdx : hittedIdx+cliIdx])
+		sp.EmptySyncDirective()
+		resultCache = resultCache[:0]
 	}
-
-	return "", err
 }
 
 func (sp *SerialPort) SetSyncDirective(directive string) {
+	sp.syncStateMu.Lock()
+	defer sp.syncStateMu.Unlock()
 	sp.SyncDirective = directive
+}
+
+func (sp *SerialPort) GetSyncDirective() string {
+	sp.syncStateMu.RLock()
+	defer sp.syncStateMu.RUnlock()
+	return sp.SyncDirective
 }
 
 func (sp *SerialPort) EmptySyncDirective() {
@@ -200,9 +171,53 @@ func (sp *SerialPort) EmptySyncDirective() {
 }
 
 func (sp *SerialPort) EnableSyncOutput() {
+	sp.syncStateMu.Lock()
+	defer sp.syncStateMu.Unlock()
 	sp.SyncOuputEnabled = true
 }
 
 func (sp *SerialPort) DisableSyncOutput() {
+	sp.syncStateMu.Lock()
+	defer sp.syncStateMu.Unlock()
 	sp.SyncOuputEnabled = false
+}
+
+func (sp *SerialPort) IsSyncOutputEnabled() bool {
+	sp.syncStateMu.RLock()
+	defer sp.syncStateMu.RUnlock()
+	return sp.SyncOuputEnabled
+}
+
+func (sp *SerialPort) markAsync() {
+	sp.syncStateMu.Lock()
+	defer sp.syncStateMu.Unlock()
+	sp.withAsyncMark = true
+	sp.asyncMarkAt = time.Now()
+}
+
+func (sp *SerialPort) consumeAsyncMark() bool {
+	const asyncMarkTTL = 2 * time.Second
+
+	sp.syncStateMu.Lock()
+	defer sp.syncStateMu.Unlock()
+
+	if sp.withAsyncMark && !sp.asyncMarkAt.IsZero() && time.Since(sp.asyncMarkAt) > asyncMarkTTL {
+		sp.withAsyncMark = false
+		sp.asyncMarkAt = time.Time{}
+	}
+
+	if !sp.withAsyncMark {
+		return false
+	}
+
+	sp.withAsyncMark = false
+	sp.asyncMarkAt = time.Time{}
+	return true
+}
+
+func (sp *SerialPort) clearAsyncMark() {
+	sp.syncStateMu.Lock()
+	defer sp.syncStateMu.Unlock()
+	sp.withAsyncMark = false
+	sp.asyncMarkAt = time.Time{}
 }

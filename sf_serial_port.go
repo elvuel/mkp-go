@@ -1,14 +1,18 @@
 package mkpgo
 
 import (
+	"errors"
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.bug.st/serial"
 )
 
 type SFSerialPort = SerialPort
+
+var ErrSyncOutputTimeout = errors.New("timeout waiting for sync output")
 
 func NewSFSerialPort() *SFSerialPort {
 	return &SFSerialPort{
@@ -23,34 +27,40 @@ func NewSFSerialPort() *SFSerialPort {
 		readerBuf:        make([]byte, 128),
 		OpenMode:         &serial.Mode{BaudRate: 115200, DataBits: 8, Parity: serial.NoParity, StopBits: serial.OneStopBit},
 
-		SyncOuputEnabled: true,
-		SyncOutputChan:   make(chan string),
+		SyncOuputEnabled:  true,
+		SyncOutputChan:    make(chan string, 1),
+		SyncOutputTimeout: 10 * time.Second,
 	}
 }
 
 func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
 	sp.locker.Lock()
-	defer sp.locker.Unlock()
 
 	if sp.Verbose {
-		log.Printf("准备执行指令: %s\n", directive)
+		log.Printf("preparing directive: %s\n", directive)
 	}
-	if sp.SyncOuputEnabled {
-		if strings.HasPrefix(directive, "alog") { // FIXME: monkey patch; as  alog  `I (136594) alog: logfile /eMMC/applog/guijidashi/r111.log`
+	if sp.IsSyncOutputEnabled() {
+		sp.clearAsyncMark()
+		sp.EmptySyncDirective()
+		if strings.HasPrefix(directive, "alog") { // as alog output does not start with full cli text.
 			sp.SetSyncDirective("alog")
 		} else {
 			sp.SetSyncDirective(directive)
 		}
 		_, err := sp.Write([]byte(directive + "\r\n"))
 		if err != nil {
-			log.Printf("执行指令: %s , 错误： %s\n", directive, err)
+			sp.EmptySyncDirective()
+			sp.locker.Unlock()
+			log.Printf("failed to execute directive %s: %v\n", directive, err)
 			return "", err
 		}
 
+		sp.locker.Unlock()
 		return sp.GetSyncOutput()
 	}
 
 	_, err := sp.Write([]byte(directive + "\r\n"))
+	sp.locker.Unlock()
 	return "", err
 }
 
@@ -58,10 +68,10 @@ func (sp *SFSerialPort) SendDirectiveAsync(directive string) error {
 	sp.locker.Lock()
 	defer sp.locker.Unlock()
 	if sp.Verbose {
-		log.Printf("准备执行指令: %s\n", directive)
+		log.Printf("preparing async directive: %s\n", directive)
 	}
 
-	sp.withAsyncMark = true
+	sp.markAsync()
 	_, err := sp.Write([]byte(directive + "\r\n"))
 	return err
 }
@@ -77,20 +87,28 @@ func (sp *SFSerialPort) GetRawDirectiveOutputParser(directive string) RawDirecti
 }
 
 func (sp *SFSerialPort) GetSyncOutput() (string, error) {
+	if sp.SyncOutputTimeout > 0 {
+		select {
+		case output := <-sp.SyncOutputChan:
+			return output, nil
+		case <-time.After(sp.SyncOutputTimeout):
+			sp.EmptySyncDirective()
+			return "", ErrSyncOutputTimeout
+		}
+	}
+
 	return <-sp.SyncOutputChan, nil
 }
 
 func (sp *SFSerialPort) StartRecording(args string) error {
-	directives := make([]string, 0)
-	directives = append(directives, "alog")
-
-	directives = append(directives, args)
-
-	return sp.SendDirectiveAsync(strings.Join(directives, " "))
+	if args == "" {
+		return sp.SendDirectiveAsync("alog")
+	}
+	return sp.SendDirectiveAsync("alog " + args)
 }
 
 func (sp *SFSerialPort) StartReplaying(logName string, delay int) error {
-	directives := make([]string, 0)
+	directives := make([]string, 0, 4)
 	directives = append(directives, "aplay")
 
 	if logName != "" {
@@ -105,15 +123,11 @@ func (sp *SFSerialPort) StartReplaying(logName string, delay int) error {
 }
 
 func (sp *SFSerialPort) StopRecording() error {
-	directives := make([]string, 0)
-	directives = append(directives, "astop")
-	return sp.SendDirectiveAsync(strings.Join(directives, " "))
+	return sp.SendDirectiveAsync("astop")
 }
 
 func (sp *SFSerialPort) CancelReplay() error {
-	directives := make([]string, 0)
-	directives = append(directives, "acancel")
-	return sp.SendDirectiveAsync(strings.Join(directives, " "))
+	return sp.SendDirectiveAsync("acancel")
 }
 
 func (sp *SFSerialPort) Mouse10(opt *M10Option) error {
@@ -123,14 +137,12 @@ func (sp *SFSerialPort) Mouse10(opt *M10Option) error {
 	// --y: y
 	// --w: wheel
 	// m10 --port 1 --b xx --x xx --y xx --w xx
-	directives := make([]string, 0)
-	directives = append(directives, "m10")
-	directives = append(directives, "--port", sp.MousePortFlag)
-	directives = append(directives, opt.ToString())
-	// _, err := sp.SendDirective(strings.Join(directives, " "))
-	// return err
+	directive := "m10 --port " + sp.MousePortFlag
+	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
+		directive += " " + optStr
+	}
 
-	return sp.SendDirectiveAsync(strings.Join(directives, " "))
+	return sp.SendDirectiveAsync(directive)
 }
 
 func (sp *SFSerialPort) MouseReleaseAll() error {
@@ -140,12 +152,10 @@ func (sp *SFSerialPort) MouseReleaseAll() error {
 }
 
 func (sp *SFSerialPort) Keypad(opt *KpadOption) error {
-	directives := make([]string, 0)
-	directives = append(directives, "kpad")
-	directives = append(directives, "--port", sp.KeyboardPortFlag)
-	directives = append(directives, opt.ToString())
-	// _, err := sp.SendDirective(strings.Join(directives, " "))
-	// return err
+	directive := "kpad --port " + sp.KeyboardPortFlag
+	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
+		directive += " " + optStr
+	}
 
-	return sp.SendDirectiveAsync(strings.Join(directives, " "))
+	return sp.SendDirectiveAsync(directive)
 }
