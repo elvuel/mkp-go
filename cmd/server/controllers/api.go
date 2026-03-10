@@ -31,6 +31,12 @@ type API struct {
 	alogRunning   bool
 	currentAlogID string
 	currentAlog   *alogSession
+
+	replayMu        sync.Mutex
+	replayRunning   bool
+	currentReplayID string
+	replayDoneAt    time.Time
+	replayTimer     *time.Timer
 }
 
 type alogSession struct {
@@ -60,10 +66,6 @@ type alogRequest struct {
 	Height  int    `json:"height"`
 	StPosX  *int   `json:"stposx"`
 	StPosY  *int   `json:"stposy"`
-}
-
-type astopRequest struct {
-	ID string `json:"id" binding:"required"`
 }
 
 func (r alogRequest) logOption() *mkpgo.LogOption {
@@ -122,6 +124,7 @@ func (a *API) RegisterRoutes(router *gin.Engine) {
 	}
 	protected.GET("/list", a.handleList)
 	protected.GET("/records/:id", a.handleGetRecord)
+	protected.POST("/aplay/:id", a.handleAplay)
 	protected.POST("/alog", a.handleAlog)
 	protected.POST("/astop", a.handleAstop)
 }
@@ -260,21 +263,11 @@ func (a *API) handleAlog(c *gin.Context) {
 }
 
 func (a *API) handleAstop(c *gin.Context) {
-	var req astopRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
-		return
-	}
-
 	a.alogMu.Lock()
 	defer a.alogMu.Unlock()
 
 	if !a.alogRunning {
 		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "alog is not running"})
-		return
-	}
-	if req.ID != a.currentAlogID {
-		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "current alog id mismatch"})
 		return
 	}
 	if err := a.mkpCtrl.StopRecord(); err != nil {
@@ -366,7 +359,7 @@ func (a *API) handleGetRecord(c *gin.Context) {
 	}
 
 	var record models.MacroRecord
-	if err := a.db.First(&record).Where("unique_id = ?", rawUniqueID).Error; err != nil {
+	if err := a.db.Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"ok":    false,
@@ -385,6 +378,106 @@ func (a *API) handleGetRecord(c *gin.Context) {
 		"ok":        true,
 		"directive": "record",
 		"record":    record,
+	})
+}
+
+func (a *API) handleAplay(c *gin.Context) {
+	if a.db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": "database is not initialized",
+		})
+		return
+	}
+
+	a.replayMu.Lock()
+	if a.replayRunning {
+		if time.Now().Before(a.replayDoneAt) {
+			remaining := time.Until(a.replayDoneAt)
+			a.replayMu.Unlock()
+			c.JSON(http.StatusConflict, gin.H{
+				"ok":                  false,
+				"error":               "replay is already running",
+				"retry_after_seconds": int(remaining.Seconds()) + 1,
+			})
+			return
+		}
+
+		a.replayRunning = false
+		a.currentReplayID = ""
+		a.replayDoneAt = time.Time{}
+		if a.replayTimer != nil {
+			a.replayTimer.Stop()
+			a.replayTimer = nil
+		}
+	}
+	a.replayMu.Unlock()
+
+	rawUniqueID := strings.TrimSpace(c.Param("id"))
+	if rawUniqueID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":    false,
+			"error": "missing record id",
+		})
+		return
+	}
+
+	var record models.MacroRecord
+	if err := a.db.Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"ok":    false,
+				"error": "record not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	if err := a.sfport.StartReplaying(record.MKPPath, -1); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	timeoutSeconds := record.Seconds + 1
+	if timeoutSeconds < 1 {
+		timeoutSeconds = 1
+	}
+	finishAt := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
+
+	a.replayMu.Lock()
+	a.replayRunning = true
+	a.currentReplayID = record.UniqueID
+	a.replayDoneAt = finishAt
+	if a.replayTimer != nil {
+		a.replayTimer.Stop()
+	}
+	replayID := record.UniqueID
+	a.replayTimer = time.AfterFunc(time.Until(finishAt), func() {
+		a.replayMu.Lock()
+		defer a.replayMu.Unlock()
+		if a.currentReplayID == replayID {
+			a.replayRunning = false
+			a.currentReplayID = ""
+			a.replayDoneAt = time.Time{}
+			a.replayTimer = nil
+		}
+	})
+	a.replayMu.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":        true,
+		"directive": "aplay",
+		"id":        record.UniqueID,
+		"mkp_path":  record.MKPPath,
+		"status":    "started",
 	})
 }
 

@@ -25,7 +25,7 @@ Use this skill to interact with MKP device.
 ```bash
 .\scripts\mkp.exe list
 .\scripts\mkp.exe list --limits 5
-.\scripts\mkp.exe stop --id foobar42
+.\scripts\mkp.exe stop
 .\scripts\mkp.exe log
 .\scripts\mkp.exe log --name alice --x 4 --y 2
 ```

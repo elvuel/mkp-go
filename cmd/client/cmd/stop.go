@@ -7,19 +7,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type stopRequest struct {
-	ID string `json:"id"`
-}
-
 func init() {
-	var currentID string
-
 	stopCmd := &cobra.Command{
 		Use:     "stop",
 		Aliases: []string{"s"},
 		Short:   "Stop current recording",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := sendJSON("POST", "/api/v1/directives/astop", stopRequest{ID: currentID}, true)
+			resp, err := sendJSON("POST", "/api/v1/directives/astop", nil, true)
 			if err != nil {
 				return err
 			}
@@ -29,9 +23,6 @@ func init() {
 			return nil
 		},
 	}
-
-	stopCmd.Flags().StringVar(&currentID, "id", "", "Current alog ID")
-	_ = stopCmd.MarkFlagRequired("id")
 
 	rootCmd.AddCommand(stopCmd)
 }

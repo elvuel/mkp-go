@@ -28,15 +28,11 @@ Stop current recording.
 **Usage**
 
 ```bash
-mkp stop --id <id>
+mkp stop
 ```
 
 **Aliases**
 `s`
-
-**Flags**
-
-- `--id string` Current alog ID (required)
 
 ### list
 
