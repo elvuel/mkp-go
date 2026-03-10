@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -120,6 +121,7 @@ func (a *API) RegisterRoutes(router *gin.Engine) {
 		protected.Use(a.jwtAuthMiddleware())
 	}
 	protected.GET("/list", a.handleList)
+	protected.GET("/records/:id", a.handleGetRecord)
 	protected.POST("/alog", a.handleAlog)
 	protected.POST("/astop", a.handleAstop)
 }
@@ -342,6 +344,47 @@ func (a *API) handleList(c *gin.Context) {
 		"limits":    limits,
 		"count":     len(records),
 		"records":   records,
+	})
+}
+
+func (a *API) handleGetRecord(c *gin.Context) {
+	if a.db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": "database is not initialized",
+		})
+		return
+	}
+
+	rawUniqueID := strings.TrimSpace(c.Param("id"))
+	if rawUniqueID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":    false,
+			"error": "missing record id",
+		})
+		return
+	}
+
+	var record models.MacroRecord
+	if err := a.db.First(&record).Where("unique_id = ?", rawUniqueID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"ok":    false,
+				"error": "record not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":        true,
+		"directive": "record",
+		"record":    record,
 	})
 }
 
