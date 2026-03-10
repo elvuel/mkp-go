@@ -1,0 +1,4 @@
+interface:
+  display_name: "mkp"
+  short_description: "a mouse and keyboard device for recorder, player, manipulator and more"
+  default_prompt: "Use $mkp to run the mkp CLI and show the output."

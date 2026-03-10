@@ -11,8 +11,9 @@ func init() {
 	var limits int
 
 	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List latest macro records",
+		Use:     "list",
+		Aliases: []string{"l"},
+		Short:   "List returns latest macro records",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if limits <= 0 {
 				return fmt.Errorf("limits must be a positive integer")

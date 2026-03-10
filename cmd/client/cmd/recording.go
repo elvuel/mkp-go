@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -24,9 +25,10 @@ func init() {
 		stposy  int
 	)
 
-	logCmd := &cobra.Command{
-		Use:   "log",
-		Short: "Start alog recording",
+	recordingCmd := &cobra.Command{
+		Use:     "recording",
+		Aliases: []string{"record", "r"},
+		Short:   "Start a macro recording",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			req := logRequest{
 				LogName: logName,
@@ -40,6 +42,10 @@ func init() {
 				req.StPosY = &stposy
 			}
 
+			if logName == "" {
+				logName = fmt.Sprintf("mkp-%s", time.Now().Format("2006-01-02 15:04:05"))
+			}
+
 			resp, err := sendJSON("POST", "/api/v1/directives/alog", req, true)
 			if err != nil {
 				return err
@@ -51,12 +57,12 @@ func init() {
 		},
 	}
 
-	logCmd.Flags().StringVarP(&logName, "name", "n", "", "Log name")
-	logCmd.Flags().IntVar(&width, "width", 0, "Screen width")
-	logCmd.Flags().IntVar(&height, "height", 0, "Screen height")
-	logCmd.Flags().IntVar(&stposx, "stposx", 0, "Start point x")
-	logCmd.Flags().IntVar(&stposy, "stposy", 0, "Start point y")
-	_ = logCmd.MarkFlagRequired("name")
+	recordingCmd.Flags().StringVarP(&logName, "name", "n", "", "Record display name")
+	recordingCmd.Flags().IntVar(&width, "width", 0, "Screen width")
+	recordingCmd.Flags().IntVar(&height, "height", 0, "Screen height")
+	recordingCmd.Flags().IntVar(&stposx, "stposx", 0, "Cursor start coordiante x")
+	recordingCmd.Flags().IntVar(&stposy, "stposy", 0, "Cursor start coordiante y")
+	// _ = recordingCmd.MarkFlagRequired("name")
 
-	rootCmd.AddCommand(logCmd)
+	rootCmd.AddCommand(recordingCmd)
 }
