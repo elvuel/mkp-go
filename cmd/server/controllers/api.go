@@ -124,6 +124,7 @@ func (a *API) RegisterRoutes(router *gin.Engine) {
 	}
 	protected.GET("/list", a.handleList)
 	protected.GET("/records/:id", a.handleGetRecord)
+	protected.DELETE("/records/:id", a.handleDeleteRecord)
 	protected.POST("/aplay/:id", a.handleAplay)
 	protected.POST("/alog", a.handleAlog)
 	protected.POST("/astop", a.handleAstop)
@@ -396,6 +397,79 @@ func (a *API) handleGetRecord(c *gin.Context) {
 		"directive": "record",
 		"record":    record,
 	})
+}
+
+func (a *API) handleDeleteRecord(c *gin.Context) {
+	if a.db == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": "database is not initialized",
+		})
+		return
+	}
+
+	rawUniqueID := strings.TrimSpace(c.Param("id"))
+	if rawUniqueID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":    false,
+			"error": "missing record id",
+		})
+		return
+	}
+
+	var record models.MacroRecord
+	if err := a.db.Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"ok":    false,
+				"error": "record not found",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	a.replayMu.Lock()
+	isReplaying := a.replayRunning && a.currentReplayID == record.UniqueID && time.Now().Before(a.replayDoneAt)
+	a.replayMu.Unlock()
+	if isReplaying {
+		c.JSON(http.StatusConflict, gin.H{
+			"ok":    false,
+			"error": "record is currently being replayed",
+		})
+		return
+	}
+
+	resp := gin.H{
+		"ok":        true,
+		"directive": "record_delete",
+		"id":        record.UniqueID,
+	}
+
+	if record.MKPPath != "" {
+		if err := a.mkpCtrl.DeleteFile(record.MKPPath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"ok":    false,
+				"error": err.Error(),
+			})
+			return
+		}
+		resp["file_deleted"] = true
+	}
+
+	if err := a.db.Delete(&record).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (a *API) handleAplay(c *gin.Context) {
