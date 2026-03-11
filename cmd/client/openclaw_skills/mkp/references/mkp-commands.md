@@ -52,6 +52,20 @@ mkp list [flags]
 - `-l, --limits int` Number of latest macro records to list (default 10)
 - `-n, --name string` Filter records by name (substring match)
 
+### replay
+
+Replay a macro record.
+
+**Usage**
+
+```bash
+mkp replay --id <record-id>
+```
+
+**Flags**
+
+- `-i, --id string` Macro record unique id (required)
+
 ### remove
 
 Delete a macro record.

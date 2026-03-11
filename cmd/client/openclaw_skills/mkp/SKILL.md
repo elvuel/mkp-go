@@ -13,7 +13,9 @@ Use this skill to interact with MKP devices via the local `mkp` client. Prefer t
 2. Ensure tool exists at `./scripts/mkp.exe`(Windows), `./scripts/mkp`(Linux/MacOsx).
 3. Select the subcommand based on intent:
    - `list` to enumerate saved macro records.
+   - `replay` to replay a saved macro record by id.
    - `recording` to start a macro recording.
+   - `remove` to delete a saved macro record by id.
    - `stop` to stop the current recording.
 4. Apply defaults for `recording`:
    - If `--name` is empty, use current timestamp string (`RFC3339`).
@@ -28,9 +30,11 @@ Use this skill to interact with MKP devices via the local `mkp` client. Prefer t
 ```bash
 .\scripts\mkp.exe list
 .\scripts\mkp.exe list --limits 5 --name demo
+.\scripts\mkp.exe replay --id abc123
 .\scripts\mkp.exe stop
 .\scripts\mkp.exe recording --name alice --stposx 4 --stposy 2
 .\scripts\mkp.exe recording --name test --width 1920 --height 1080
+.\scripts\mkp.exe remove --id abc123
 ```
 
 ## Notes
