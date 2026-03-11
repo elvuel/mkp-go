@@ -311,8 +311,11 @@ func (a *API) handleList(c *gin.Context) {
 		}
 		if parsed > 10 {
 			limits = 10
+		} else {
+			limits = parsed
 		}
 	}
+	nameFilter := strings.TrimSpace(c.Query("name"))
 
 	if a.db == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -322,8 +325,13 @@ func (a *API) handleList(c *gin.Context) {
 		return
 	}
 
+	query := a.db
+	if nameFilter != "" {
+		query = query.Where("name LIKE ?", "%"+nameFilter+"%")
+	}
+
 	records := make([]models.MacroRecord, 0, limits)
-	if err := a.db.Order("created_at DESC").Limit(limits).Find(&records).Error; err != nil {
+	if err := query.Order("created_at DESC").Limit(limits).Find(&records).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":    false,
 			"error": err.Error(),
@@ -331,13 +339,17 @@ func (a *API) handleList(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"ok":        true,
 		"directive": "list",
 		"limits":    limits,
 		"count":     len(records),
 		"records":   records,
-	})
+	}
+	if nameFilter != "" {
+		resp["name"] = nameFilter
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (a *API) handleGetRecord(c *gin.Context) {

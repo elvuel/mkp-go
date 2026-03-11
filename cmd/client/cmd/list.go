@@ -3,12 +3,14 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/spf13/cobra"
 )
 
 func init() {
 	var limits int
+	var name string
 
 	listCmd := &cobra.Command{
 		Use:     "list",
@@ -19,7 +21,12 @@ func init() {
 				return fmt.Errorf("limits must be a positive integer")
 			}
 
-			path := fmt.Sprintf("/api/v1/directives/list?limits=%d", limits)
+			values := url.Values{}
+			values.Set("limits", fmt.Sprintf("%d", limits))
+			if name != "" {
+				values.Set("name", name)
+			}
+			path := "/api/v1/directives/list?" + values.Encode()
 			resp, err := sendJSON("GET", path, nil, true)
 			if err != nil {
 				return err
@@ -32,5 +39,6 @@ func init() {
 	}
 
 	listCmd.Flags().IntVar(&limits, "limits", 10, "Number of latest macro records to list")
+	listCmd.Flags().StringVar(&name, "name", "", "Filter records by name (substring match)")
 	rootCmd.AddCommand(listCmd)
 }

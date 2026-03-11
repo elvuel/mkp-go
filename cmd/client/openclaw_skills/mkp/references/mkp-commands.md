@@ -50,3 +50,4 @@ mkp list [flags]
 **Flags**
 
 - `--limits int` Number of latest macro records to list (default 10)
+- `--name string` Filter records by name (substring match)
