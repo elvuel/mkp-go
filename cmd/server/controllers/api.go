@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-vgo/robotgo"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/xid"
 	"gorm.io/gorm"
@@ -527,6 +528,12 @@ func (a *API) handleAplay(c *gin.Context) {
 			"error": err.Error(),
 		})
 		return
+	}
+
+	if record.StartPointX >= 0 && record.StartPointY >= 0 {
+		robotgo.Move(record.StartPointX, record.StartPointY)
+	} else {
+		robotgo.Move(0, 0)
 	}
 
 	if err := a.sfport.StartReplaying(record.MKPPath, -1); err != nil {
