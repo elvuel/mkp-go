@@ -2,6 +2,7 @@ package helper
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	mkpgo "github.com/elvuel/mkp-go"
@@ -34,6 +35,7 @@ func Alog(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) (str
 	}
 
 	directive := "alog " + strings.Join(args, " ")
+	fmt.Println(directive)
 
 	result, err := sfport.SendDirective(directive)
 
@@ -199,7 +201,7 @@ func ComposeLogFullpath(logPath string) string {
 		logPath += ".log"
 	}
 
-	if !strings.HasPrefix(logPath, "/eMMC/applog") {
+	if !strings.HasPrefix(logPath, "/eMMC/applog/") {
 		return "/eMMC/applog/" + logPath
 	}
 
