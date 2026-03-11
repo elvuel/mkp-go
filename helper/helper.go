@@ -13,11 +13,11 @@ func StopRecord(sfport *mkpgo.SFSerialPort) error {
 
 func StartRecord(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) error {
 	args := make([]string, 0)
+	args = append(args, logName)
+
 	if opt != nil {
 		args = append(args, opt.CliArgs()...)
 	}
-
-	args = append(args, logName)
 	return sfport.StartRecording(strings.Join(args, " "))
 }
 
@@ -27,11 +27,11 @@ func Alog(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) (str
 	}
 
 	args := make([]string, 0)
+	args = append(args, logName)
+
 	if opt != nil {
 		args = append(args, opt.CliArgs()...)
 	}
-
-	args = append(args, logName)
 
 	directive := "alog " + strings.Join(args, " ")
 

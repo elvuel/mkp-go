@@ -95,11 +95,14 @@ func (r alogRequest) logOption() *mkpgo.LogOption {
 
 func NewAPI(sfportName string, auth servercfg.AuthConfig, db *gorm.DB) (*API, error) {
 	sfport := mkpgo.NewSFSerialPort()
+	sfport.SyncOuputEnabled = true
 	sfport.Name = sfportName
 	if err := sfport.Open(); err != nil {
 		return nil, err
 	}
 	go sfport.Read()
+
+	sfport.StopRecording()
 
 	return &API{
 		mkpCtrl: mkpcontroller.NewController(sfport),
@@ -228,11 +231,6 @@ func (a *API) handleAlog(c *gin.Context) {
 	}
 
 	alogID := xid.New().String()
-	if err := a.mkpCtrl.StartRecord(alogID, req.logOption()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
-		return
-	}
-
 	startPointX := -1
 	if req.StPosX != nil {
 		startPointX = *req.StPosX
@@ -240,6 +238,28 @@ func (a *API) handleAlog(c *gin.Context) {
 	startPointY := -1
 	if req.StPosY != nil {
 		startPointY = *req.StPosY
+	}
+
+	if startPointX < 0 {
+		startPointX = 0
+	}
+
+	if startPointY < 0 {
+		startPointY = 0
+	}
+
+	req.StPosX = &startPointX
+	req.StPosY = &startPointY
+
+	robotgo.Move(startPointX, startPointY)
+
+	if req.Width <= 0 || req.Height <= 0 {
+		req.Width, req.Height = robotgo.GetScreenSize()
+	}
+
+	if _, err := a.mkpCtrl.Alog(alogID, req.logOption()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
 	}
 
 	a.alogRunning = true
