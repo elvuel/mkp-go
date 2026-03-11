@@ -11,7 +11,7 @@ func init() {
 	stopCmd := &cobra.Command{
 		Use:     "stop",
 		Aliases: []string{"s"},
-		Short:   "Stop current recording",
+		Short:   "Stop current recording or playing",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resp, err := sendJSON("POST", "/api/v1/directives/astop", nil, true)
 			if err != nil {

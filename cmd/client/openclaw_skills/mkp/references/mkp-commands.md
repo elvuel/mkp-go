@@ -23,7 +23,7 @@ mkp recording --name <name> [flags]
 
 ### stop
 
-Stop current recording.
+Stop current recording or playing.
 
 **Usage**
 

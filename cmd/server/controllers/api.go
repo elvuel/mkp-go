@@ -267,12 +267,17 @@ func (a *API) handleAstop(c *gin.Context) {
 	defer a.alogMu.Unlock()
 
 	if !a.alogRunning {
-		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "alog is not running"})
-		return
-	}
-	if err := a.mkpCtrl.StopRecord(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
-		return
+		if err := a.mkpCtrl.StopRecord(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+			return
+		} else {
+			c.JSON(http.StatusOK, gin.H{
+				"ok":        true,
+				"directive": "astop",
+				"status":    "The stop command has been sent.",
+			})
+			return
+		}
 	}
 
 	stoppedID := a.currentAlogID
