@@ -245,7 +245,7 @@ func (a *API) handleAlog(c *gin.Context) {
 	a.currentAlog = &alogSession{
 		Name:         req.LogName,
 		UniqueID:     alogID,
-		MKPPath:      a.mkpCtrl.ComposeLogFullpath(req.LogName),
+		MKPPath:      a.mkpCtrl.ComposeLogFullpath(alogID),
 		StartPointX:  startPointX,
 		StartPointY:  startPointY,
 		ScreenWidth:  req.Width,
