@@ -4,9 +4,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+type listRecord struct {
+	Name         string `json:"name"`
+	UniqueID     string `json:"unique_id"`
+	MKPPath      string `json:"mkp_path"`
+	StartPointX  int    `json:"start_point_x"`
+	StartPointY  int    `json:"start_point_y"`
+	ScreenWidth  int    `json:"screen_width"`
+	ScreenHeight int    `json:"screen_height"`
+	OS           string `json:"os"`
+	Seconds      int    `json:"seconds"`
+	Milliseconds int    `json:"milliseconds"`
+	CreatedAt    string `json:"created_at"`
+}
 
 func init() {
 	var limits int
@@ -32,13 +47,89 @@ func init() {
 				return err
 			}
 
-			b, _ := json.MarshalIndent(resp, "", "  ")
-			fmt.Println(string(b))
+			if resp["count"].(float64) == 0 {
+				fmt.Println("No records found")
+				return nil
+			}
+
+			records, err := parseListRecords(resp)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println(renderListTable(records))
 			return nil
 		},
 	}
 
-	listCmd.Flags().IntVar(&limits, "limits", 10, "Number of latest macro records to list")
-	listCmd.Flags().StringVar(&name, "name", "", "Filter records by name (substring match)")
+	listCmd.Flags().IntVarP(&limits, "limits", "l", 10, "Number of latest macro records to list")
+	listCmd.Flags().StringVarP(&name, "name", "n", "", "Filter records by name (substring match)")
 	rootCmd.AddCommand(listCmd)
+}
+
+func parseListRecords(resp map[string]any) ([]listRecord, error) {
+	raw, ok := resp["records"]
+	if !ok {
+		return nil, fmt.Errorf("response missing records")
+	}
+
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	var records []listRecord
+	if err := json.Unmarshal(data, &records); err != nil {
+		return nil, fmt.Errorf("invalid records: %w", err)
+	}
+	return records, nil
+}
+
+func renderListTable(records []listRecord) string {
+	headers := []string{
+		"Name",
+		"RID",
+		"Location",
+		"Cursor Initial Position",
+		"Screen Size",
+		"OS",
+		"Length",
+		"created At",
+	}
+
+	var b strings.Builder
+	b.WriteString("| ")
+	b.WriteString(strings.Join(headers, " | "))
+	b.WriteString(" |\n| ")
+	b.WriteString(strings.Repeat("--- | ", len(headers)-1))
+	b.WriteString("--- |\n")
+
+	for _, record := range records {
+		values := []string{
+			escapeTableValue(record.Name),
+			escapeTableValue(record.UniqueID),
+			escapeTableValue(record.MKPPath),
+			escapeTableValue(fmt.Sprintf("(%d,%d)", record.StartPointX, record.StartPointY)),
+			escapeTableValue(fmt.Sprintf("%dx%d", record.ScreenWidth, record.ScreenHeight)),
+			escapeTableValue(record.OS),
+			escapeTableValue(formatLength(record.Seconds, record.Milliseconds)),
+			escapeTableValue(record.CreatedAt),
+		}
+		b.WriteString("| ")
+		b.WriteString(strings.Join(values, " | "))
+		b.WriteString(" |\n")
+	}
+
+	return b.String()
+}
+
+func formatLength(seconds, milliseconds int) string {
+	return fmt.Sprintf("%ds %dms", seconds, milliseconds)
+}
+
+func escapeTableValue(value string) string {
+	value = strings.ReplaceAll(value, "|", "\\|")
+	value = strings.ReplaceAll(value, "\n", " ")
+	value = strings.ReplaceAll(value, "\r", " ")
+	return value
 }
