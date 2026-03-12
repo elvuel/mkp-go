@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/elvuel/mkp-go/cmd/client/helper"
 	"github.com/spf13/cobra"
 )
+
+const versionCacheTTL = 24 * time.Hour
 
 type versionResponse struct {
 	OK            bool        `json:"ok"`
@@ -22,11 +25,27 @@ type mkpVersion struct {
 	AVersion string `json:"aver"`
 }
 
+type versionCacheEntry struct {
+	ServerAddr string           `json:"server_addr,omitempty"`
+	CachedAt   string           `json:"cached_at,omitempty"`
+	Response   *versionResponse `json:"response,omitempty"`
+}
+
 func init() {
 	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "Show mkp agent & server and device version info",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadClientConfig()
+			if err != nil {
+				return err
+			}
+
+			if cached, ok := cachedVersionResponse(cfg); ok {
+				fmt.Println(renderVersionTable(cached))
+				return nil
+			}
+
 			resp, err := sendJSON("GET", "/api/v1/version", nil, false)
 			if err != nil {
 				return err
@@ -34,6 +53,14 @@ func init() {
 
 			parsed, err := parseVersionResponse(resp)
 			if err != nil {
+				return err
+			}
+
+			freshCfg, err := loadClientConfig()
+			if err != nil {
+				return err
+			}
+			if err := saveVersionCache(freshCfg, parsed); err != nil {
 				return err
 			}
 
@@ -63,6 +90,48 @@ func parseVersionResponse(resp map[string]any) (*versionResponse, error) {
 		return nil, fmt.Errorf("invalid version response: %w", err)
 	}
 	return parsed, nil
+}
+
+func cachedVersionResponse(cfg *clientConfig) (*versionResponse, bool) {
+	if cfg == nil || cfg.VersionCache == nil || cfg.VersionCache.Response == nil {
+		return nil, false
+	}
+
+	cache := cfg.VersionCache
+	if normalizeServerAddr(cache.ServerAddr) != normalizeServerAddr(serverAddr) {
+		return nil, false
+	}
+
+	cachedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(cache.CachedAt))
+	if err != nil || cachedAt.IsZero() {
+		return nil, false
+	}
+
+	now := time.Now()
+	if cachedAt.After(now.Add(versionCacheTTL)) {
+		return nil, false
+	}
+	if now.Sub(cachedAt) > versionCacheTTL {
+		return nil, false
+	}
+
+	return cache.Response, true
+}
+
+func saveVersionCache(cfg *clientConfig, resp *versionResponse) error {
+	if cfg == nil {
+		return fmt.Errorf("missing client config")
+	}
+	cfg.VersionCache = &versionCacheEntry{
+		ServerAddr: normalizeServerAddr(serverAddr),
+		CachedAt:   time.Now().UTC().Format(time.RFC3339),
+		Response:   resp,
+	}
+	return saveClientConfig(cfg)
+}
+
+func normalizeServerAddr(addr string) string {
+	return strings.TrimRight(strings.TrimSpace(addr), "/")
 }
 
 func renderVersionTable(info *versionResponse) string {

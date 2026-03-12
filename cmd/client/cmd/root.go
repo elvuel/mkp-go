@@ -32,13 +32,14 @@ var (
 )
 
 type clientConfig struct {
-	ServerAddr     string    `json:"server_addr,omitempty"`
-	Mode           string    `json:"mode,omitempty"`
-	Token          string    `json:"token,omitempty"`
-	TokenExpiresAt string    `json:"token_expires_at,omitempty"`
-	Username       string    `json:"username,omitempty"`
-	Password       string    `json:"password,omitempty"`
-	TimeoutSeconds int       `json:"timeout_seconds,omitempty"`
+	ServerAddr     string             `json:"server_addr,omitempty"`
+	Mode           string             `json:"mode,omitempty"`
+	Token          string             `json:"token,omitempty"`
+	TokenExpiresAt string             `json:"token_expires_at,omitempty"`
+	Username       string             `json:"username,omitempty"`
+	Password       string             `json:"password,omitempty"`
+	TimeoutSeconds int                `json:"timeout_seconds,omitempty"`
+	VersionCache   *versionCacheEntry `json:"version_cache,omitempty"`
 }
 
 var rootCmd = &cobra.Command{
