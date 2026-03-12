@@ -79,3 +79,13 @@ mkp remove --id <record-id>
 **Flags**
 
 - `-i, --id string` Macro record unique id (required)
+
+### version
+
+Show mkp agent & server and device version info.
+
+**Usage**
+
+```bash
+mkp version
+```

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/elvuel/mkp-go/cmd/client/helper"
 	"github.com/spf13/cobra"
 )
 
@@ -106,14 +107,14 @@ func renderListTable(records []listRecord) string {
 
 	for _, record := range records {
 		values := []string{
-			escapeTableValue(record.Name),
-			escapeTableValue(record.UniqueID),
-			escapeTableValue(record.MKPPath),
-			escapeTableValue(fmt.Sprintf("(%d,%d)", record.StartPointX, record.StartPointY)),
-			escapeTableValue(fmt.Sprintf("%dx%d", record.ScreenWidth, record.ScreenHeight)),
-			escapeTableValue(record.OS),
-			escapeTableValue(formatLength(record.Seconds, record.Milliseconds)),
-			escapeTableValue(record.CreatedAt),
+			helper.EscapeTableValue(record.Name),
+			helper.EscapeTableValue(record.UniqueID),
+			helper.EscapeTableValue(record.MKPPath),
+			helper.EscapeTableValue(fmt.Sprintf("(%d,%d)", record.StartPointX, record.StartPointY)),
+			helper.EscapeTableValue(fmt.Sprintf("%dx%d", record.ScreenWidth, record.ScreenHeight)),
+			helper.EscapeTableValue(record.OS),
+			helper.EscapeTableValue(formatLength(record.Seconds, record.Milliseconds)),
+			helper.EscapeTableValue(record.CreatedAt),
 		}
 		b.WriteString("| ")
 		b.WriteString(strings.Join(values, " | "))
@@ -125,11 +126,4 @@ func renderListTable(records []listRecord) string {
 
 func formatLength(seconds, milliseconds int) string {
 	return fmt.Sprintf("%ds %dms", seconds, milliseconds)
-}
-
-func escapeTableValue(value string) string {
-	value = strings.ReplaceAll(value, "|", "\\|")
-	value = strings.ReplaceAll(value, "\n", " ")
-	value = strings.ReplaceAll(value, "\r", " ")
-	return value
 }

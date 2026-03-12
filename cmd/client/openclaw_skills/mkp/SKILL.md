@@ -8,7 +8,11 @@ metadata:
         "emoji": "keyboard",
         "os": ["windows", "linux", "darwin"],
         "primaryEnv": "MKP_SERVER",
-        "requires": { "bins": ["./scripts/mkp.exe", "./scripts/mkp"], "env": ["MKP_SERVER"] },
+        "requires":
+          {
+            "bins": ["./scripts/mkp.exe", "./scripts/mkp"],
+            "env": ["MKP_SERVER"],
+          },
         "install": [],
       },
   }
@@ -28,6 +32,7 @@ Use this skill to interact with MKP devices via the local `mkp` client. Prefer t
    - `recording` to start a macro recording.
    - `remove` to delete a saved macro record by id.
    - `stop` to stop the current recording.
+   - `version` to show mkp agent & server and device version info.
 4. Apply defaults for `recording`:
    - If `--name` is empty, use current timestamp string (`RFC3339`).
    - Only pass `--width`, `--height`, `--stposx`, `--stposy` when provided.
@@ -46,6 +51,7 @@ Use this skill to interact with MKP devices via the local `mkp` client. Prefer t
 .\scripts\mkp.exe recording --name alice --stposx 4 --stposy 2
 .\scripts\mkp.exe recording --name test --width 1920 --height 1080
 .\scripts\mkp.exe remove --id abc123
+.\scripts\mkp.exe version
 ```
 
 ## Notes
