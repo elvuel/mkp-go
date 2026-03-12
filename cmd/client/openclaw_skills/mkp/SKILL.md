@@ -1,6 +1,17 @@
 ---
 name: mkp
 description: mouse and keyboard recorder/player/programmatic controler for MKP devices, optimized for OpenClaw invocation.
+metadata:
+  {
+    "openclaw":
+      {
+        "emoji": "keyboard",
+        "os": ["windows", "linux", "darwin"],
+        "primaryEnv": "MKP_SERVER",
+        "requires": { "bins": ["./scripts/mkp.exe", "./scripts/mkp"], "env": ["MKP_SERVER"] },
+        "install": [],
+      },
+  }
 ---
 
 # mkp
