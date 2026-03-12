@@ -7,6 +7,7 @@ import (
 )
 
 func main() {
+	cmd.SetVersion(Version)
 	if err := cmd.Execute(); err != nil {
 		log.Fatal(err)
 	}

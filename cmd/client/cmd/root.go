@@ -50,6 +50,10 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
+func SetVersion(version string) {
+	rootCmd.Version = strings.TrimSpace(version)
+}
+
 func init() {
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		return hydrateRuntimeConfig()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"flag"
 	"log"
 	"net/http"
@@ -20,7 +21,13 @@ import (
 
 func main() {
 	configPath := flag.String("c", "", "path to server config JSON")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("mkp-server %s\n", Version)
+		return
+	}
 
 	appCfg, loadedPath, err := servercfg.Load(*configPath)
 	if err != nil {
