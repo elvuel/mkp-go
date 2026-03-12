@@ -52,7 +52,7 @@ func main() {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
 
-	api, err := controllers.NewAPI(sfportName, appCfg.Auth, db)
+	api, err := controllers.NewAPI(sfportName, appCfg.Auth, db, Version)
 	if err != nil {
 		log.Fatalf("failed to initialize api controller: %v", err)
 	}

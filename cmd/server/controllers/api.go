@@ -20,6 +20,7 @@ import (
 	servercfg "github.com/elvuel/mkp-go/cmd/server/config"
 	"github.com/elvuel/mkp-go/cmd/server/models"
 	mkpcontroller "github.com/elvuel/mkp-go/controller"
+	"github.com/elvuel/mkp-go/helper"
 )
 
 type API struct {
@@ -27,6 +28,7 @@ type API struct {
 	sfport  *mkpgo.SFSerialPort
 	auth    servercfg.AuthConfig
 	db      *gorm.DB
+	version string
 
 	alogMu        sync.Mutex
 	alogRunning   bool
@@ -93,7 +95,7 @@ func (r alogRequest) logOption() *mkpgo.LogOption {
 	return opt
 }
 
-func NewAPI(sfportName string, auth servercfg.AuthConfig, db *gorm.DB) (*API, error) {
+func NewAPI(sfportName string, auth servercfg.AuthConfig, db *gorm.DB, version string) (*API, error) {
 	sfport := mkpgo.NewSFSerialPort()
 	sfport.SyncOuputEnabled = true
 	sfport.Name = sfportName
@@ -109,6 +111,7 @@ func NewAPI(sfportName string, auth servercfg.AuthConfig, db *gorm.DB) (*API, er
 		sfport:  sfport,
 		auth:    auth,
 		db:      db,
+		version: strings.TrimSpace(version),
 	}, nil
 }
 
@@ -121,6 +124,7 @@ func (a *API) Close() {
 func (a *API) RegisterRoutes(router *gin.Engine) {
 	api := router.Group("/api/v1")
 	api.POST("/auth/token", a.handleToken)
+	api.GET("/version", a.handleVersion)
 
 	protected := api.Group("/directives")
 	if !(a.auth.MuteInDebug && gin.Mode() == gin.DebugMode) {
@@ -132,6 +136,32 @@ func (a *API) RegisterRoutes(router *gin.Engine) {
 	protected.POST("/aplay/:id", a.handleAplay)
 	protected.POST("/alog", a.handleAlog)
 	protected.POST("/astop", a.handleAstop)
+}
+
+func (a *API) handleVersion(c *gin.Context) {
+	if a.sfport == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": "serial port is not initialized",
+		})
+		return
+	}
+
+	mkpVersion, err := helper.Aversion(a.sfport)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":         true,
+		"directive":  "version",
+		"mkp_server": a.version,
+		"mkp_device": mkpVersion,
+	})
 }
 
 func (a *API) unauthorized(c *gin.Context, message string) {
