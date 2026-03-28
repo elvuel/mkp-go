@@ -126,6 +126,10 @@ func (sp *SFSerialPort) StopRecording() error {
 	return sp.SendDirectiveAsync("astop")
 }
 
+func (sp *SFSerialPort) Stop() error {
+	return sp.StopRecording()
+}
+
 func (sp *SFSerialPort) CancelReplay() error {
 	return sp.SendDirectiveAsync("acancel")
 }
