@@ -145,7 +145,9 @@ func (sp *SFSerialPort) Mouse10(opt *M10Option) error {
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-
+	if sp.Verbose {
+		log.Printf("preparing directive: %s\n", directive)
+	}
 	return sp.SendDirectiveAsync(directive)
 }
 
@@ -160,6 +162,8 @@ func (sp *SFSerialPort) Keypad(opt *KpadOption) error {
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-
+	if sp.Verbose {
+		log.Printf("preparing directive: %s\n", directive)
+	}
 	return sp.SendDirectiveAsync(directive)
 }

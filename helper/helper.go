@@ -3,7 +3,9 @@ package helper
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 
 	mkpgo "github.com/elvuel/mkp-go"
 )
@@ -391,111 +393,59 @@ func AInspect(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogInfo, error) {
 }
 
 func KeyDown(sfport *mkpgo.SFSerialPort, key string) error {
-	opt := mkpgo.NewKpadOption().WithKeys([]string{key}).WithDelay(0).WithHold()
-	return sfport.Keypad(opt)
+	return sendKeyDown(sfport, mkpgo.NewKpadOption().WithDelay(0), key)
 }
 
 // 释放
 func KeyUp(sfport *mkpgo.SFSerialPort, key string) error {
-	opt := mkpgo.NewKpadOption().WithKeys([]string{key}).WithDelay(0).WithAutoRelease()
-	return sfport.Keypad(opt)
+	return sendKeyUp(sfport, mkpgo.NewKpadOption().WithDelay(0), key)
 }
 
 // 按下释放
-func KeyTap(sfport *mkpgo.SFSerialPort, keys []string) error {
-	opt := mkpgo.NewKpadOption().WithKeys(keys).WithDelay(0).WithAutoRelease()
-	return sfport.Keypad(opt)
-}
+func KeyTap(sfport *mkpgo.SFSerialPort, key string) error {
+	sleep := rand.Intn(100) + 20
+	if err := KeyDown(sfport, key); err != nil {
+		return err
+	}
 
-func KeyPress(sfport *mkpgo.SFSerialPort, key string, sleep int) error {
-	return KeyPresses(sfport, []string{key}, sleep)
+	time.Sleep(time.Duration(sleep) * time.Millisecond)
+
+	if err := KeyUp(sfport, key); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int) error {
-	applyKeys := make([]string, 0)
-
 	for _, key := range keys {
-		switch key {
-		case "!":
-			applyKeys = append(applyKeys, "mod_lshift", "1")
-		case "@":
-			applyKeys = append(applyKeys, "mod_lshift", "2")
-		case "#":
-			applyKeys = append(applyKeys, "mod_lshift", "3")
-		case "$":
-			applyKeys = append(applyKeys, "mod_lshift", "4")
-		case "%":
-			applyKeys = append(applyKeys, "mod_lshift", "5")
-		case "^":
-			applyKeys = append(applyKeys, "mod_lshift", "6")
-		case "&":
-			applyKeys = append(applyKeys, "mod_lshift", "7")
-		case "*":
-			applyKeys = append(applyKeys, "mod_lshift", "8")
-		case "(":
-			applyKeys = append(applyKeys, "mod_lshift", "9")
-		case ")":
-			applyKeys = append(applyKeys, "mod_lshift", "0")
-		case " ":
-			applyKeys = append(applyKeys, "space")
-		case "-":
-			applyKeys = append(applyKeys, "minus")
-		case "_":
-			applyKeys = append(applyKeys, "mod_lshift", "minus")
-		case "=":
-			applyKeys = append(applyKeys, "equal")
-		case "+":
-			applyKeys = append(applyKeys, "mod_lshift", "equal")
-		case "[":
-			applyKeys = append(applyKeys, "leftbracket")
-		case "{":
-			applyKeys = append(applyKeys, "mod_lshift", "leftbracket")
-		case "]":
-			applyKeys = append(applyKeys, "rightbracket")
-		case "}":
-			applyKeys = append(applyKeys, "mod_lshift", "rightbracket")
-		case "\\":
-			applyKeys = append(applyKeys, "backslash")
-		case "|":
-			applyKeys = append(applyKeys, "mod_lshift", "backslash")
-		// case "~":
-		// 	applyKeys = append(applyKeys, "mod_lshift", "hashtilde")
-		case ";":
-			applyKeys = append(applyKeys, "semicolon")
-		case ":":
-			applyKeys = append(applyKeys, "mod_lshift", "semicolon")
-		case "'":
-			applyKeys = append(applyKeys, "apostrophe")
-		case "\"":
-			applyKeys = append(applyKeys, "mod_lshift", "apostrophe")
-		case "`":
-			applyKeys = append(applyKeys, "grave")
-		case "~":
-			applyKeys = append(applyKeys, "mod_lshift", "grave")
-		case ",":
-			applyKeys = append(applyKeys, "comma")
-		case "<":
-			applyKeys = append(applyKeys, "mod_lshift", "comma")
-		case ".":
-			applyKeys = append(applyKeys, "dot")
-		case ">":
-			applyKeys = append(applyKeys, "mod_lshift", "dot")
-		case "/":
-			applyKeys = append(applyKeys, "slash")
-		case "?":
-			applyKeys = append(applyKeys, "mod_lshift", "slash")
-		default:
-			applyKeys = append(applyKeys, key)
+		if err := KeyTap(sfport, key); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	opt := mkpgo.NewKpadOption().WithKeys(applyKeys).WithDelay(0)
-	if sleep > 0 {
-		opt.WithRelease(sleep)
+func sendKeyDown(sfport *mkpgo.SFSerialPort, opt *mkpgo.KpadOption, key string) error {
+	if strings.TrimSpace(key) == "" {
+		return nil
 	}
-	err := sfport.Keypad(opt)
-	if err != nil {
-		return err
+
+	downOpt := opt.KeyDown(key)
+	return sfport.Keypad(downOpt)
+}
+
+func sendKeyUp(sfport *mkpgo.SFSerialPort, opt *mkpgo.KpadOption, key string) error {
+	releaseOpt, remainHoldOpt := opt.KeyUp(key)
+	if releaseOpt != nil {
+		if err := sfport.Keypad(releaseOpt); err != nil {
+			return err
+		}
+	}
+	if remainHoldOpt != nil {
+		if err := sfport.Keypad(remainHoldOpt); err != nil {
+			return err
+		}
 	}
 
 	return nil

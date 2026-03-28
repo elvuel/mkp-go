@@ -131,14 +131,9 @@ func (c *Controller) KeyUp(key string) error {
 	return helper.KeyUp(c.sfport, key)
 }
 
-// helper func KeyTap(sfport *mkpgo.SFSerialPort, keys []string) error
-func (c *Controller) KeyTap(keys []string) error {
-	return helper.KeyTap(c.sfport, keys)
-}
-
-// helper func KeyPress(sfport *mkpgo.SFSerialPort, key string, sleep int) error
-func (c *Controller) KeyPress(key string, sleep int) error {
-	return helper.KeyPress(c.sfport, key, sleep)
+// helper func KeyTap(sfport *mkpgo.SFSerialPort, key string) error
+func (c *Controller) KeyTap(key string) error {
+	return helper.KeyTap(c.sfport, key)
 }
 
 // helper func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int) error
