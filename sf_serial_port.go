@@ -1,6 +1,7 @@
 package mkpgo
 
 import (
+	"context"
 	"errors"
 	"log"
 	"strconv"
@@ -42,6 +43,16 @@ func NewSFSerialPort() *SFSerialPort {
 // SendDirective sends a directive and optionally waits for sync output.
 // SendDirective 发送指令；在同步模式下等待并返回解析前原始输出。
 func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
+	return sp.SendDirectiveContext(context.Background(), directive)
+}
+
+// SendDirectiveContext sends a directive and optionally waits for sync output.
+// SendDirectiveContext 发送指令；支持通过 context 取消等待过程。
+func (sp *SFSerialPort) SendDirectiveContext(ctx context.Context, directive string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	sp.locker.Lock()
 
 	if sp.VerboseDirective {
@@ -64,7 +75,7 @@ func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
 		}
 
 		sp.locker.Unlock()
-		return sp.GetSyncOutput()
+		return sp.GetSyncOutputContext(ctx)
 	}
 
 	_, err := sp.Write([]byte(directive + "\r\n"))
@@ -75,6 +86,16 @@ func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
 // SendDirectiveAsync sends a directive without waiting for response.
 // SendDirectiveAsync 异步发送指令，不阻塞等待输出。
 func (sp *SFSerialPort) SendDirectiveAsync(directive string) error {
+	return sp.SendDirectiveAsyncContext(context.Background(), directive)
+}
+
+// SendDirectiveAsyncContext sends a directive without waiting for response.
+// SendDirectiveAsyncContext 异步发送指令；在发送前可由 context 取消。
+func (sp *SFSerialPort) SendDirectiveAsyncContext(ctx context.Context, directive string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	sp.locker.Lock()
 	defer sp.locker.Unlock()
 	if sp.VerboseDirective {
@@ -103,31 +124,61 @@ func (sp *SFSerialPort) GetRawDirectiveOutputParser(directive string) RawDirecti
 // GetSyncOutput waits for one sync output with configured timeout.
 // GetSyncOutput 按配置超时等待一条同步输出结果。
 func (sp *SFSerialPort) GetSyncOutput() (string, error) {
+	return sp.GetSyncOutputContext(context.Background())
+}
+
+// GetSyncOutputContext waits for one sync output with timeout and context cancellation.
+// GetSyncOutputContext 按配置等待同步输出，支持 context 取消。
+func (sp *SFSerialPort) GetSyncOutputContext(ctx context.Context) (string, error) {
 	if sp.SyncOutputTimeout > 0 {
+		timer := time.NewTimer(sp.SyncOutputTimeout)
+		defer timer.Stop()
+
 		select {
 		case output := <-sp.SyncOutputChan:
 			return output, nil
-		case <-time.After(sp.SyncOutputTimeout):
+		case <-ctx.Done():
+			sp.EmptySyncDirective()
+			return "", ctx.Err()
+		case <-timer.C:
 			sp.EmptySyncDirective()
 			return "", ErrSyncOutputTimeout
 		}
 	}
 
-	return <-sp.SyncOutputChan, nil
+	select {
+	case output := <-sp.SyncOutputChan:
+		return output, nil
+	case <-ctx.Done():
+		sp.EmptySyncDirective()
+		return "", ctx.Err()
+	}
 }
 
 // StartRecording starts device-side log recording.
 // StartRecording 启动设备端录制（alog）。
 func (sp *SFSerialPort) StartRecording(args string) error {
+	return sp.StartRecordingContext(context.Background(), args)
+}
+
+// StartRecordingContext starts device-side log recording.
+// StartRecordingContext 启动设备端录制（alog），支持 context 取消。
+func (sp *SFSerialPort) StartRecordingContext(ctx context.Context, args string) error {
 	if args == "" {
-		return sp.SendDirectiveAsync("alog")
+		return sp.SendDirectiveAsyncContext(ctx, "alog")
 	}
-	return sp.SendDirectiveAsync("alog " + args)
+	return sp.SendDirectiveAsyncContext(ctx, "alog "+args)
 }
 
 // StartReplaying starts replay from recorded log.
 // StartReplaying 启动指定日志的回放任务。
 func (sp *SFSerialPort) StartReplaying(logName string, delay int) error {
+	return sp.StartReplayingContext(context.Background(), logName, delay)
+}
+
+// StartReplayingContext starts replay from recorded log.
+// StartReplayingContext 启动指定日志回放任务，支持 context 取消。
+func (sp *SFSerialPort) StartReplayingContext(ctx context.Context, logName string, delay int) error {
 	directives := make([]string, 0, 4)
 	directives = append(directives, "aplay")
 
@@ -139,30 +190,54 @@ func (sp *SFSerialPort) StartReplaying(logName string, delay int) error {
 		directives = append(directives, "--delay", strconv.Itoa(delay))
 	}
 
-	return sp.SendDirectiveAsync(strings.Join(directives, " "))
+	return sp.SendDirectiveAsyncContext(ctx, strings.Join(directives, " "))
 }
 
 // StopRecording stops current recording session.
 // StopRecording 停止当前录制任务。
 func (sp *SFSerialPort) StopRecording() error {
-	return sp.SendDirectiveAsync("astop")
+	return sp.StopRecordingContext(context.Background())
+}
+
+// StopRecordingContext stops current recording session.
+// StopRecordingContext 停止当前录制任务，支持 context 取消。
+func (sp *SFSerialPort) StopRecordingContext(ctx context.Context) error {
+	return sp.SendDirectiveAsyncContext(ctx, "astop")
 }
 
 // Stop is an alias of StopRecording.
 // Stop 是 StopRecording 的别名。
 func (sp *SFSerialPort) Stop() error {
-	return sp.StopRecording()
+	return sp.StopContext(context.Background())
+}
+
+// StopContext is an alias of StopRecordingContext.
+// StopContext 是 StopRecordingContext 的别名。
+func (sp *SFSerialPort) StopContext(ctx context.Context) error {
+	return sp.StopRecordingContext(ctx)
 }
 
 // CancelReplay cancels an ongoing replay task.
 // CancelReplay 取消当前回放任务。
 func (sp *SFSerialPort) CancelReplay() error {
-	return sp.SendDirectiveAsync("acancel")
+	return sp.CancelReplayContext(context.Background())
+}
+
+// CancelReplayContext cancels an ongoing replay task.
+// CancelReplayContext 取消当前回放任务，支持 context 取消。
+func (sp *SFSerialPort) CancelReplayContext(ctx context.Context) error {
+	return sp.SendDirectiveAsyncContext(ctx, "acancel")
 }
 
 // Mouse10 sends m10 (mouse) directive.
 // Mouse10 发送 m10 鼠标控制指令。
 func (sp *SFSerialPort) Mouse10(opt *M10Option) error {
+	return sp.Mouse10Context(context.Background(), opt)
+}
+
+// Mouse10Context sends m10 (mouse) directive.
+// Mouse10Context 发送 m10 鼠标控制指令，支持 context 取消。
+func (sp *SFSerialPort) Mouse10Context(ctx context.Context, opt *M10Option) error {
 	// --p: port #
 	// --b: botton
 	// --x: x
@@ -173,25 +248,37 @@ func (sp *SFSerialPort) Mouse10(opt *M10Option) error {
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-	return sp.SendDirectiveAsync(directive)
+	return sp.SendDirectiveAsyncContext(ctx, directive)
 }
 
 // MouseReleaseAll releases all mouse buttons.
 // MouseReleaseAll 释放全部鼠标按键状态。
 func (sp *SFSerialPort) MouseReleaseAll() error {
+	return sp.MouseReleaseAllContext(context.Background())
+}
+
+// MouseReleaseAllContext releases all mouse buttons.
+// MouseReleaseAllContext 释放全部鼠标按键状态，支持 context 取消。
+func (sp *SFSerialPort) MouseReleaseAllContext(ctx context.Context) error {
 	btnReleaseOpt := &M10Option{}
 	btnReleaseOpt.SetButton(0)
-	return sp.Mouse10(btnReleaseOpt)
+	return sp.Mouse10Context(ctx, btnReleaseOpt)
 }
 
 // Keypad sends kpad (keyboard) directive and commits local key cache on success.
 // Keypad 发送 kpad 键盘指令，并在发送成功后提交本地按键缓存状态。
 func (sp *SFSerialPort) Keypad(opt *KpadOption) error {
+	return sp.KeypadContext(context.Background(), opt)
+}
+
+// KeypadContext sends kpad directive and commits local key cache on success.
+// KeypadContext 发送 kpad 指令，并在发送成功后提交本地按键缓存状态。
+func (sp *SFSerialPort) KeypadContext(ctx context.Context, opt *KpadOption) error {
 	directive := "kpad --port " + sp.KeyboardPortFlag
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-	if err := sp.SendDirectiveAsync(directive); err != nil {
+	if err := sp.SendDirectiveAsyncContext(ctx, directive); err != nil {
 		return err
 	}
 	opt.commitKpadState()
