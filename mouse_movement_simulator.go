@@ -6,7 +6,8 @@ import (
 	"time"
 )
 
-// MouseMovementPoint 结构体
+// MouseMovementPoint represents one sampled movement step.
+// MouseMovementPoint 表示一次采样得到的鼠标移动步点。
 type MouseMovementPoint struct {
 	RelX     float64
 	RelY     float64
@@ -23,7 +24,8 @@ type MouseMovementPoint struct {
 模拟竞技游戏：减小 SpeedMultiplier（即提速）并开启 UseOvershoot，因为高手在拉枪时通常会有明显的过冲修正动作。
 */
 
-// MouseMovementSimulatorConfig 包含所有可配置参数
+// MouseMovementSimulatorConfig contains tunable trajectory parameters.
+// MouseMovementSimulatorConfig 包含轨迹生成的可调参数。
 type MouseMovementSimulatorConfig struct {
 	// 时间的统一缩放：SpeedMultiplier 不仅改变了总路程的耗时，还自动调整了采样点之间的 Interval 以及 Pause 的长度。这保证了轨迹在变快或变慢时，其运动特征（如加速度曲线）保持比例一致，不会因为变快就显得闪烁。
 	// 动态响应：你可以根据目标距离动态调整倍率。例如：
@@ -62,7 +64,8 @@ type MouseMovementSimulatorConfig struct {
 	CorrectionTimeRatio float64 // 修正阶段耗时比例 (默认 0.25)
 }
 
-// DefaultMouseMovementSimulatorConfig 提供默认参数
+// DefaultMouseMovementSimulatorConfig returns sensible default simulator config.
+// DefaultMouseMovementSimulatorConfig 返回默认模拟参数。
 func DefaultMouseMovementSimulatorConfig() *MouseMovementSimulatorConfig {
 	return &MouseMovementSimulatorConfig{
 		SpeedMultiplier:  1.0,
@@ -85,6 +88,8 @@ func DefaultMouseMovementSimulatorConfig() *MouseMovementSimulatorConfig {
 	}
 }
 
+// MouseMovementSimulator generates and replays human-like mouse trajectories.
+// MouseMovementSimulator 用于生成并执行拟人化鼠标轨迹。
 type MouseMovementSimulator struct {
 	Cfg          *MouseMovementSimulatorConfig
 	UseOvershoot bool
@@ -94,6 +99,8 @@ type MouseMovementSimulator struct {
 	SFPort *SFSerialPort
 }
 
+// NewMouseMovementSimulator constructs a simulator with explicit feature toggles.
+// NewMouseMovementSimulator 使用指定开关创建模拟器实例。
 func NewMouseMovementSimulator(cfg *MouseMovementSimulatorConfig, overshoot, pause, jitter bool) *MouseMovementSimulator {
 	return &MouseMovementSimulator{
 		Cfg:          cfg,
@@ -103,8 +110,12 @@ func NewMouseMovementSimulator(cfg *MouseMovementSimulatorConfig, overshoot, pau
 	}
 }
 
+// MouseMovementSimulatorOption applies functional options to simulator.
+// MouseMovementSimulatorOption 是模拟器函数式配置项。
 type MouseMovementSimulatorOption func(*MouseMovementSimulator)
 
+// WithBesselOffset sets Bezier control-point offsets.
+// WithBesselOffset 设置贝塞尔控制点偏移参数。
 func WithBesselOffset(ctrlOffset, correctionOffset float64) MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.Cfg.CtrlOffset = ctrlOffset
@@ -112,53 +123,71 @@ func WithBesselOffset(ctrlOffset, correctionOffset float64) MouseMovementSimulat
 	}
 }
 
+// WithOvershoot enables/disables overshoot phase.
+// WithOvershoot 启用或关闭过冲阶段。
 func WithOvershoot(use bool) MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.UseOvershoot = use
 	}
 }
 
+// WithoutOvershoot disables overshoot phase.
+// WithoutOvershoot 关闭过冲阶段。
 func WithoutOvershoot() MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.UseOvershoot = false
 	}
 }
 
+// WithPause enables/disables pause between phases.
+// WithPause 启用或关闭阶段间停顿。
 func WithPause(use bool) MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.UsePause = use
 	}
 }
 
+// WithoutPause disables pause between phases.
+// WithoutPause 关闭阶段间停顿。
 func WithoutPause() MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.UsePause = false
 	}
 }
 
+// WithJitter enables/disables random jitter.
+// WithJitter 启用或关闭抖动扰动。
 func WithJitter(use bool) MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.UseJitter = use
 	}
 }
 
+// WithoutJitter disables random jitter.
+// WithoutJitter 关闭抖动扰动。
 func WithoutJitter() MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.UseJitter = false
 	}
 }
 
+// WithSFPort binds target serial port for replay.
+// WithSFPort 绑定用于执行轨迹的串口对象。
 func WithSFPort(port *SFSerialPort) MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.SFPort = port
 	}
 }
+// WithConfig replaces simulator config.
+// WithConfig 替换模拟器配置。
 func WithConfig(cfg *MouseMovementSimulatorConfig) MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.Cfg = cfg
 	}
 }
 
+// ApplyOptions applies functional options in order.
+// ApplyOptions 按顺序应用函数式配置项。
 func (mms *MouseMovementSimulator) ApplyOptions(opts ...MouseMovementSimulatorOption) *MouseMovementSimulator {
 	for _, opt := range opts {
 		opt(mms)
@@ -166,39 +195,56 @@ func (mms *MouseMovementSimulator) ApplyOptions(opts ...MouseMovementSimulatorOp
 	return mms
 }
 
+// SetSFPort sets target serial port.
+// SetSFPort 设置目标串口。
 func (mms *MouseMovementSimulator) SetSFPort(port *SFSerialPort) {
 	mms.SFPort = port
 }
 
+// SetConfig sets simulator config directly.
+// SetConfig 直接设置模拟参数。
 func (mms *MouseMovementSimulator) SetConfig(cfg *MouseMovementSimulatorConfig) {
 	mms.Cfg = cfg
 }
 
+// WithOvershoot toggles overshoot behavior.
+// WithOvershoot 切换过冲行为开关。
 func (mms *MouseMovementSimulator) WithOvershoot(use bool) {
 	mms.UseOvershoot = use
 }
 
+// WithoutOvershoot disables overshoot behavior.
+// WithoutOvershoot 关闭过冲行为。
 func (mms *MouseMovementSimulator) WithoutOvershoot() {
 	mms.UseOvershoot = false
 }
 
+// WithPause toggles phase pause behavior.
+// WithPause 切换阶段停顿开关。
 func (mms *MouseMovementSimulator) WithPause(use bool) {
 	mms.UsePause = use
 }
 
+// WithoutPause disables phase pause behavior.
+// WithoutPause 关闭阶段停顿。
 func (mms *MouseMovementSimulator) WithoutPause() {
 	mms.UsePause = false
 }
 
+// WithJitter toggles jitter behavior.
+// WithJitter 切换抖动开关。
 func (mms *MouseMovementSimulator) WithJitter(use bool) {
 	mms.UseJitter = use
 }
 
+// WithoutJitter disables jitter behavior.
+// WithoutJitter 关闭抖动行为。
 func (mms *MouseMovementSimulator) WithoutJitter() {
 	mms.UseJitter = false
 }
 
-// generatePath 生成路径
+// generatePath builds one movement segment path.
+// generatePath 生成单段路径（冲刺段或修正段）。
 func (mc *MouseMovementSimulator) generatePath(start, end [2]float64, totalTime time.Duration, isCorrection bool, lastAbs [2]float64) ([]MouseMovementPoint, [2]float64) {
 	// 应用速度倍率
 	adjustedTime := time.Duration(float64(totalTime) * mc.Cfg.SpeedMultiplier)
@@ -289,7 +335,8 @@ func (mc *MouseMovementSimulator) generatePath(start, end [2]float64, totalTime 
 	return points, currentAbs
 }
 
-// GenerateTrajectory 主生成逻辑
+// GenerateTrajectory creates complete trajectory from start to end.
+// GenerateTrajectory 生成从起点到终点的完整轨迹。
 func (mc *MouseMovementSimulator) GenerateTrajectory(start, end [2]float64, baseTime time.Duration) []MouseMovementPoint {
 	lastAbs := start
 
@@ -334,7 +381,8 @@ func (mc *MouseMovementSimulator) GenerateTrajectory(start, end [2]float64, base
 	return append(path1, path2...)
 }
 
-// MoveTo 执行移动
+// MoveTo sends generated trajectory to device as m10 commands.
+// MoveTo 按生成轨迹发送 m10 指令执行移动。
 func (mc *MouseMovementSimulator) MoveTo(button int, start, end [2]float64, baseTime time.Duration) {
 	m10Opt := NewM10Option()
 

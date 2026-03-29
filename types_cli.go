@@ -4,10 +4,16 @@ import (
 	"fmt"
 )
 
+// SN is serial-number response model.
+// SN 是序列号响应结构。
 type SN struct {
+	// SN is device serial number string.
+	// SN 是设备序列号。
 	SN string `json:"sn"`
 }
 
+// FileNode describes one file-system node returned by firmware.
+// FileNode 描述固件返回的文件系统节点。
 type FileNode struct {
 	DisplayName string     `json:"displayName,omitempty"` // 显示名称（友好的名称）
 	Name        string     `json:"name"`                  // 节点名称（文件名/目录名）
@@ -17,16 +23,21 @@ type FileNode struct {
 	Contents    []FileNode `json:"contents,omitempty"`    // 子节点列表（仅目录有值）
 }
 
-// FileSystem 最外层结构体，对应 JSON 根对象
+// FileSystem is root response model for filesystem queries.
+// FileSystem 是文件系统查询的根响应结构。
 type FileSystem struct {
 	RootDir FileNode `json:"rootDir,omitempty"` // 根目录节点（eMMC）
 	Error   string   `json:"error,omitempty"`   // 错误信息
 }
 
+// Heartbeat represents alive response payload.
+// Heartbeat 表示存活检测返回结构。
 type Heartbeat struct {
 	Timetamp int64 `json:"timetamp"`
 }
 
+// LogOption defines optional arguments for alog command.
+// LogOption 定义 alog 命令的可选参数。
 type LogOption struct {
 	// "width":0, "heigh":0, "stpos": {"x":-1,"y":-1 }
 	Width  int `json:"width"`
@@ -37,6 +48,8 @@ type LogOption struct {
 	} `json:"stpos"`
 }
 
+// CliArgs converts log options to CLI argument list.
+// CliArgs 将日志参数转换为命令行参数数组。
 func (opt *LogOption) CliArgs() []string {
 	// alog --width 1920 --heigh 1024 --stposx 300 --stposy 300 circle3
 	args := make([]string, 0)
@@ -55,16 +68,22 @@ func (opt *LogOption) CliArgs() []string {
 	return args
 }
 
+// LogInfo contains both log option metadata and duration.
+// LogInfo 同时包含日志参数与时长信息。
 type LogInfo struct {
 	LogOption
 	LogLength
 }
 
+// LogLength is duration model returned by firmware.
+// LogLength 是固件返回的时长结构。
 type LogLength struct {
 	Seconds      int `json:"seconds"`
 	Milliseconds int `json:"milsec"`
 }
 
+// MKPVersion is firmware version payload.
+// MKPVersion 表示固件版本信息。
 type MKPVersion struct {
 	UVersion string `json:"uver"`
 	AVersion string `json:"aver"`

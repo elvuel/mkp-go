@@ -1,7 +1,9 @@
 package mkpgo
 
-// 修饰符掩码（Modifier Masks）- 用于HID报告的第一个字节
-// NOTE: HID报告的第二个字节为保留位，固定为0x00
+// Modifier masks for byte-1 in HID keyboard report.
+// 修饰符掩码（Modifier Masks）用于 HID 报告第 1 字节。
+// NOTE: byte-2 in HID report is reserved and fixed to 0x00.
+// 说明：HID 报告第 2 字节为保留位，固定为 0x00。
 const (
 	KEY_MOD_LCTRL  uint8 = 0x01 // 左Ctrl键修饰符
 	KEY_MOD_LSHIFT uint8 = 0x02 // 左Shift键修饰符
@@ -13,8 +15,10 @@ const (
 	KEY_MOD_RMETA  uint8 = 0x80 // 右Meta键修饰符（通常对应Windows键/Command键）
 )
 
-// 扫描码（Scan Codes）- HID报告的最后N个槽位（通常为6个）
-// 无按键时为0x00；若按下的按键数超过N，所有槽位将填充KEY_ERR_OVF表示溢出
+// Scan codes for key slots in HID keyboard report (typically 6 slots).
+// 扫描码（Scan Codes）用于 HID 键盘报告的按键槽位（通常 6 个）。
+// 0x00 means no key; overflow fills slots with KEY_ERR_OVF.
+// 0x00 表示无按键；按键过多溢出时槽位会填充 KEY_ERR_OVF。
 const (
 	KEY_NONE    uint8 = 0x00 // 无按键按下
 	KEY_ERR_OVF uint8 = 0x01 // 键盘溢出错误（按键过多时所有槽位填充此值，"幽灵键"）

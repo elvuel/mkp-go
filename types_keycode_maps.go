@@ -5,22 +5,29 @@ import (
 	"sync"
 )
 
-// Package usbhid 提供USB HID键盘扫描码的双向映射（键名↔扫描码）
+// Package-level keycode maps provide bidirectional USB HID mapping.
+// 包级键码映射提供 USB HID 键名与扫描码的双向转换。
 // 转化自C语言头文件：https://source.android.com/devices/input/keyboard-devices.html
 // 原作者：MightyPork (2016)，Public Domain（公有领域）
 
-// 全局映射初始化锁（确保并发安全）
+// keyCodeInitOnce guarantees one-time map initialization.
+// keyCodeInitOnce 保证映射初始化只执行一次。
 var keyCodeInitOnce sync.Once
 
-// KeyNameToHexCode 键名→扫描码映射（键名为原C文件的宏名，如"MOD_LCTRL"）
+// KeyNameToHexCode maps key name to hex code string.
+// KeyNameToHexCode 将键名映射为十六进制扫描码字符串。
 // var KeyNameToHexCode map[string]int
 var KeyNameToHexCode map[string]string
+// KeyNameToNCode maps key name to numeric scan code.
+// KeyNameToNCode 将键名映射为数值扫描码。
 var KeyNameToNCode map[string]int
 
-// KeyCodeToName 扫描码→键名及描述映射（值包含键名和原注释说明，便于反向查询）
+// KeyCodeToName maps numeric scan code back to name+description text.
+// KeyCodeToName 将数值扫描码反向映射为键名及描述文本。
 var KeyCodeToName map[int]string
 
-// init 初始化全局映射（确保仅执行一次）
+// init initializes keycode maps once.
+// init 初始化键码映射（仅执行一次）。
 func init() {
 	keyCodeInitOnce.Do(func() {
 		// 初始化键名→扫描码映射
@@ -257,7 +264,8 @@ func init() {
 	})
 }
 
-// addKeycodeMapping 辅助函数：批量添加键名→扫描码、扫描码→键名及描述的映射
+// addKeycodeMapping fills mapping tables in triplets.
+// addKeycodeMapping 以三元组批量填充映射表。
 // 参数格式：keyName1, code1, desc1, keyName2, code2, desc2, ...
 func addKeycodeMapping(params ...interface{}) {
 	for i := 0; i < len(params); i += 3 {
