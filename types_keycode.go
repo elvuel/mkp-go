@@ -185,6 +185,7 @@ func (opt *KpadOption) KeyDown(key string) *KpadOption {
 		return opt
 	}
 
+	var pressedKeys []string
 	var pressedModKeys []string
 	kpadStateMu.Lock()
 	for _, key := range keys {
@@ -194,10 +195,11 @@ func (opt *KpadOption) KeyDown(key string) *KpadOption {
 			KpadPressedKeysCache[key] = struct{}{}
 		}
 	}
+	pressedKeys = snapshotPressedKpadKeysLocked()
 	pressedModKeys = snapshotPressedModKeysLocked()
 	kpadStateMu.Unlock()
 
-	opt.WithKeys(keys).WithHold()
+	opt.WithKeys(pressedKeys).WithHold()
 	opt.WithModKeys(pressedModKeys)
 	return opt
 }

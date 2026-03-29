@@ -456,7 +456,11 @@ func KeypadRelease(sfport *mkpgo.SFSerialPort) error {
 }
 
 func KeypadReleaseAll(sfport *mkpgo.SFSerialPort) error {
-	return sfport.Keypad(mkpgo.HidKpadReleaseAll)
+	if err := sfport.Keypad(mkpgo.HidKpadReleaseAll); err != nil {
+		return err
+	}
+	mkpgo.ResetKpadPressedCaches()
+	return nil
 }
 
 func MouseReleaseAll(sfport *mkpgo.SFSerialPort) error {

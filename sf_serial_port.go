@@ -36,7 +36,7 @@ func NewSFSerialPort() *SFSerialPort {
 func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
 	sp.locker.Lock()
 
-	if sp.Verbose {
+	if sp.VerboseDirective {
 		log.Printf("preparing directive: %s\n", directive)
 	}
 	if sp.IsSyncOutputEnabled() {
@@ -67,7 +67,7 @@ func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
 func (sp *SFSerialPort) SendDirectiveAsync(directive string) error {
 	sp.locker.Lock()
 	defer sp.locker.Unlock()
-	if sp.Verbose {
+	if sp.VerboseDirective {
 		log.Printf("preparing async directive: %s\n", directive)
 	}
 
@@ -145,9 +145,6 @@ func (sp *SFSerialPort) Mouse10(opt *M10Option) error {
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-	if sp.Verbose {
-		log.Printf("preparing directive: %s\n", directive)
-	}
 	return sp.SendDirectiveAsync(directive)
 }
 
@@ -161,9 +158,6 @@ func (sp *SFSerialPort) Keypad(opt *KpadOption) error {
 	directive := "kpad --port " + sp.KeyboardPortFlag
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
-	}
-	if sp.Verbose {
-		log.Printf("preparing directive: %s\n", directive)
 	}
 	return sp.SendDirectiveAsync(directive)
 }

@@ -14,3 +14,11 @@ var (
 	// Example key names: A, ENTER, F1, KP0.
 	KpadPressedKeysCache = make(map[string]struct{})
 )
+
+func ResetKpadPressedCaches() {
+	kpadStateMu.Lock()
+	defer kpadStateMu.Unlock()
+
+	clear(KpadPressedModKeysCache)
+	clear(KpadPressedKeysCache)
+}

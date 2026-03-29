@@ -50,6 +50,20 @@ func main() {
 	// DemoKpadOptionKeyDownUpV2()
 	// DemoOutputExclamation(" ")
 
+	sfport.VerboseDirective = true
+
+	// 请根据以下调用顺序的期望输出对keyDown进行调整
+	// 按下MOD_ALT: keydown("w")
+	// kpad --port 2 --s 0x04 --rel 0 --d 0
+	// 紧接着按下q(MOD_ALT未释放):keydown("q")
+	// kpad --port 2 --s 0x04 --x1 0x14 --rel 0 --d 0
+
+	helper.KeyDown(sfport, "w")
+	helper.KeyDown(sfport, "d")
+	time.Sleep(3000 * time.Millisecond)
+	helper.KeyUp(sfport, "d")
+	helper.KeyUp(sfport, "w")
+
 	helper.KeyDown(sfport, "alt")
 	helper.KeyDown(sfport, "n")
 	time.Sleep(200 * time.Millisecond)

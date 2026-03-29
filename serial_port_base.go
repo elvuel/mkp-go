@@ -22,9 +22,10 @@ type SerialPort struct {
 	MousePortFlag    string `json:"mouse_port_flag"`
 	KeyboardPortFlag string `json:"keyboard_port_flag"`
 
-	Verbose  bool         `json:"verbose"`
-	OpenMode *serial.Mode `json:"-"`
-	port     serial.Port  `json:"-"`
+	VerboseDirective bool         `json:"verbose_directive"`
+	Verbose          bool         `json:"verbose"`
+	OpenMode         *serial.Mode `json:"-"`
+	port             serial.Port  `json:"-"`
 
 	locker            sync.Mutex
 	syncStateMu       sync.RWMutex
