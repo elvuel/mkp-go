@@ -2,7 +2,6 @@ package mkpgo
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/duke-git/lancet/v2/slice"
@@ -63,6 +62,8 @@ type KpadOption struct {
 	Delay int `json:"delay"`
 	// 输出详情
 	Verbose bool `json:"verbose"`
+
+	commitKpadStateFn func()
 }
 
 func NewKpadOption() *KpadOption {
@@ -185,22 +186,37 @@ func (opt *KpadOption) KeyDown(key string) *KpadOption {
 		return opt
 	}
 
-	var pressedKeys []string
-	var pressedModKeys []string
-	kpadStateMu.Lock()
+	kpadStateMu.RLock()
+	nextModKeys := clonePressedKeys(KpadPressedModKeysCache)
+	nextNormalKeys := clonePressedKeys(KpadPressedKeysCache)
+
 	for _, key := range keys {
 		if slice.Contain(ModKeyNames, key) {
-			KpadPressedModKeysCache[key] = struct{}{}
+			nextModKeys = appendPressedKey(nextModKeys, key)
 		} else {
-			KpadPressedKeysCache[key] = struct{}{}
+			nextNormalKeys = appendPressedKey(nextNormalKeys, key)
 		}
 	}
-	pressedKeys = snapshotPressedKpadKeysLocked()
-	pressedModKeys = snapshotPressedModKeysLocked()
-	kpadStateMu.Unlock()
+	pressedModKeys := clonePressedKeys(nextModKeys)
+	pressedKeys := make([]string, 0, len(nextModKeys)+len(nextNormalKeys))
+	pressedKeys = append(pressedKeys, nextModKeys...)
+	pressedKeys = append(pressedKeys, nextNormalKeys...)
+	kpadStateMu.RUnlock()
 
 	opt.WithKeys(pressedKeys).WithHold()
 	opt.WithModKeys(pressedModKeys)
+	commitKeys := append([]string(nil), keys...)
+	opt.setKpadStateCommit(func() {
+		kpadStateMu.Lock()
+		defer kpadStateMu.Unlock()
+		for _, key := range commitKeys {
+			if slice.Contain(ModKeyNames, key) {
+				KpadPressedModKeysCache = appendPressedKey(KpadPressedModKeysCache, key)
+			} else {
+				KpadPressedKeysCache = appendPressedKey(KpadPressedKeysCache, key)
+			}
+		}
+	})
 	return opt
 }
 
@@ -212,18 +228,22 @@ func (opt *KpadOption) KeyUp(key string) (*KpadOption, *KpadOption) {
 
 	var releaseModKeys []string
 	var remainModKeys []string
-	kpadStateMu.Lock()
+	kpadStateMu.RLock()
 	releaseModKeys = snapshotPressedModKeysLocked()
+	nextModKeys := clonePressedKeys(KpadPressedModKeysCache)
+	nextNormalKeys := clonePressedKeys(KpadPressedKeysCache)
 	for _, key := range keys {
 		if slice.Contain(ModKeyNames, key) {
-			delete(KpadPressedModKeysCache, key)
+			nextModKeys = removePressedKey(nextModKeys, key)
 		} else {
-			delete(KpadPressedKeysCache, key)
+			nextNormalKeys = removePressedKey(nextNormalKeys, key)
 		}
 	}
-	remainKeys := snapshotPressedKpadKeysLocked()
-	remainModKeys = snapshotPressedModKeysLocked()
-	kpadStateMu.Unlock()
+	remainModKeys = clonePressedKeys(nextModKeys)
+	remainKeys := make([]string, 0, len(nextModKeys)+len(nextNormalKeys))
+	remainKeys = append(remainKeys, remainModKeys...)
+	remainKeys = append(remainKeys, nextNormalKeys...)
+	kpadStateMu.RUnlock()
 
 	releaseOpt := NewKpadOption().
 		WithDelay(opt.Delay).
@@ -239,13 +259,26 @@ func (opt *KpadOption) KeyUp(key string) (*KpadOption, *KpadOption) {
 		WithVerbose(opt.Verbose)
 
 	if len(remainKeys) == 0 {
-		return releaseOpt, remainHoldOpt.WithKey("NONE").WithHold()
+		remainHoldOpt.WithKey("NONE").WithHold()
+	} else {
+		remainHoldOpt.WithKeys(remainKeys).WithHold()
+		if hasKpadModKey(keys) {
+			remainHoldOpt.WithModKeys(remainModKeys)
+		}
 	}
 
-	remainHoldOpt.WithKeys(remainKeys).WithHold()
-	if hasKpadModKey(keys) {
-		remainHoldOpt.WithModKeys(remainModKeys)
-	}
+	commitKeys := append([]string(nil), keys...)
+	remainHoldOpt.setKpadStateCommit(func() {
+		kpadStateMu.Lock()
+		defer kpadStateMu.Unlock()
+		for _, key := range commitKeys {
+			if slice.Contain(ModKeyNames, key) {
+				KpadPressedModKeysCache = removePressedKey(KpadPressedModKeysCache, key)
+			} else {
+				KpadPressedKeysCache = removePressedKey(KpadPressedKeysCache, key)
+			}
+		}
+	})
 	return releaseOpt, remainHoldOpt
 }
 
@@ -370,26 +403,48 @@ func hasKpadModKey(keys []string) bool {
 }
 
 func snapshotPressedModKeysLocked() []string {
-	modKeys := make([]string, 0, len(ModKeyNames))
-	for _, modKey := range ModKeyNames {
-		if _, ok := KpadPressedModKeysCache[modKey]; ok {
-			modKeys = append(modKeys, modKey)
-		}
-	}
-	return modKeys
+	return clonePressedKeys(KpadPressedModKeysCache)
 }
 
 func snapshotPressedKpadKeysLocked() []string {
 	keys := make([]string, 0, len(KpadPressedModKeysCache)+len(KpadPressedKeysCache))
-
 	keys = append(keys, snapshotPressedModKeysLocked()...)
-
-	normalKeys := make([]string, 0, len(KpadPressedKeysCache))
-	for key := range KpadPressedKeysCache {
-		normalKeys = append(normalKeys, key)
-	}
-	sort.Strings(normalKeys)
-	keys = append(keys, normalKeys...)
-
+	keys = append(keys, clonePressedKeys(KpadPressedKeysCache)...)
 	return keys
+}
+
+func clonePressedKeys(keys []string) []string {
+	return append([]string(nil), keys...)
+}
+
+func appendPressedKey(keys []string, key string) []string {
+	for _, cachedKey := range keys {
+		if cachedKey == key {
+			return keys
+		}
+	}
+	return append(keys, key)
+}
+
+func removePressedKey(keys []string, key string) []string {
+	for i, cachedKey := range keys {
+		if cachedKey == key {
+			return append(keys[:i], keys[i+1:]...)
+		}
+	}
+	return keys
+}
+
+func (opt *KpadOption) setKpadStateCommit(fn func()) {
+	opt.commitKpadStateFn = fn
+}
+
+func (opt *KpadOption) commitKpadState() {
+	if opt == nil || opt.commitKpadStateFn == nil {
+		return
+	}
+
+	commitFn := opt.commitKpadStateFn
+	opt.commitKpadStateFn = nil
+	commitFn()
 }

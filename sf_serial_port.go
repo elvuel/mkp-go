@@ -159,5 +159,9 @@ func (sp *SFSerialPort) Keypad(opt *KpadOption) error {
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-	return sp.SendDirectiveAsync(directive)
+	if err := sp.SendDirectiveAsync(directive); err != nil {
+		return err
+	}
+	opt.commitKpadState()
+	return nil
 }

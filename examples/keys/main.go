@@ -69,6 +69,10 @@ func main() {
 	time.Sleep(200 * time.Millisecond)
 	helper.KeyUp(sfport, "n")
 	helper.KeyUp(sfport, "alt")
+	time.Sleep(3 * time.Second)
+
+	helper.KeyTap(sfport, "esc")
+	time.Sleep(3 * time.Second)
 
 	// KpadOption 调整 KeyDown/KeyUp 如果 key是mod keys, 则设定ModKeys。（modkeys需要考虑 其它全局缓存中的mod keys)
 
@@ -78,25 +82,25 @@ func main() {
 	// 紧接着按下q(MOD_ALT未释放):keydown("q")
 	// kpad --port 2 --s 0x04 --x1 0x14 --rel 0 --d 0
 
-	// helper.KeyDown(sfport, "MOD_LALT")
-	// helper.KeyDown(sfport, "q")
-	// time.Sleep(600 * time.Millisecond)
-	// helper.KeyUp(sfport, "q")
-	// helper.KeyUp(sfport, "MOD_LALT")
+	helper.KeyDown(sfport, "MOD_LALT")
+	helper.KeyDown(sfport, "q")
+	time.Sleep(600 * time.Millisecond)
+	helper.KeyUp(sfport, "q")
+	helper.KeyUp(sfport, "MOD_LALT")
 
-	// time.Sleep(3 * time.Second)
+	time.Sleep(3 * time.Second)
 
-	// helper.KeyDown(sfport, "space")
-	// time.Sleep(3 * time.Second)
-	// helper.KeyUp(sfport, "space")
+	helper.KeyDown(sfport, "space")
+	time.Sleep(3 * time.Second)
+	helper.KeyUp(sfport, "space")
 
-	// time.Sleep(500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
-	// helper.KeyDown(sfport, "MOD_LALT")
-	// helper.KeyDown(sfport, "q")
-	// time.Sleep(200 * time.Millisecond)
-	// helper.KeyUp(sfport, "q")
-	// helper.KeyUp(sfport, "MOD_LALT")
+	helper.KeyDown(sfport, "MOD_LALT")
+	helper.KeyDown(sfport, "q")
+	time.Sleep(200 * time.Millisecond)
+	helper.KeyUp(sfport, "q")
+	helper.KeyUp(sfport, "MOD_LALT")
 
 	// helper.KeyTap(sfport, "!")
 	// helper.KeyTap(sfport, "enter")
