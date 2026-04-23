@@ -11,7 +11,7 @@ import (
 var (
 	// RawDirectiveOutputParsers maps directive verb to its output parser.
 	// RawDirectiveOutputParsers 将指令名映射到对应输出解析器。
-	RawDirectiveOutputParsers      = make(map[string]RawDirectiveOutputParser)
+	RawDirectiveOutputParsers = make(map[string]RawDirectiveOutputParser)
 	// Parser related common errors.
 	// 解析器相关通用错误。
 	ErrDirectiveParserMissing      = errors.New("directive parser missing")
@@ -38,6 +38,7 @@ var (
 	InstantRawDirective_delete_file = NewRawDirective_delete_file()
 	InstantRawDirective_ainsp       = NewRawDirective_ainsp()
 	InstantRawDirective_astop       = NewRawDirective_astop()
+	InstantRawDirective_acancel     = NewRawDirective_acancel()
 	InstantRawDirective_alog        = NewRawDirective_alog()
 )
 
@@ -54,6 +55,7 @@ func InitParsers() {
 		InstantRawDirective_alive,
 		InstantRawDirective_ainsp,
 		InstantRawDirective_astop,
+		InstantRawDirective_acancel,
 		InstantRawDirective_alog,
 	}
 
@@ -161,6 +163,43 @@ func (r *RawDirective_astop) Parse(_, data string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	if len(data) > 0 {
+		return data, nil
+	}
+
+	return "", ErrRawDirectiveParseFailed
+}
+
+// RawDirective_acancel parses acancel output.
+// RawDirective_acancel 解析 acancel 指令输出。
+type RawDirective_acancel struct {
+	*RawDirective
+	Name string
+}
+
+// NewRawDirective_acancel creates acancel parser.
+// NewRawDirective_acancel 创建 acancel 解析器。
+func NewRawDirective_acancel() *RawDirective_acancel {
+	return &RawDirective_acancel{Name: "acancel", RawDirective: &RawDirective{JSONOutput: true}}
+}
+
+// String returns directive name.
+// String 返回对应指令名。
+func (r *RawDirective_acancel) String() string {
+	return r.Name
+}
+
+// Parse parses acancel raw output.
+// Parse 解析 acancel 原始输出。
+func (r *RawDirective_acancel) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
 
 	if len(data) > 0 {
 		return data, nil

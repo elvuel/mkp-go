@@ -170,12 +170,37 @@ func (sp *SerialPort) Read() (string, error) {
 			continue
 		}
 
-		cliIdx := bytes.Index(resultCache[hittedIdx:], []byte("cli>"))
-		if cliIdx < 0 {
+		// terminal signal
+		var outputCompletedIdx int
+
+		if strings.HasPrefix(syncDirective, "acancel") { // monkey patch for acancel
+			pendingIdx := bytes.Index(resultCache[hittedIdx:], []byte("cli> \r\ncli> "))
+			fmt.Println("pendingIdx", pendingIdx)
+			if pendingIdx < 0 {
+				continue
+			}
+
+			interruptIdx := bytes.Index(resultCache[hittedIdx:], []byte("cli> \r\ncli> I"))
+			if interruptIdx >= 0 {
+				jsonEndIdx := bytes.Index(resultCache[hittedIdx:], []byte("}\r\r\ncli>"))
+				if jsonEndIdx < 0 {
+					continue
+				} else {
+					outputCompletedIdx = jsonEndIdx + 1
+				}
+			} else {
+				fmt.Println("no i")
+				outputCompletedIdx = bytes.Index(resultCache[hittedIdx:], []byte("cli> \r\ncli> \r"))
+			}
+		} else {
+			outputCompletedIdx = bytes.Index(resultCache[hittedIdx:], []byte("cli>"))
+		}
+
+		if outputCompletedIdx < 0 {
 			continue
 		}
 
-		sp.SyncOutputChan <- string(resultCache[hittedIdx : hittedIdx+cliIdx])
+		sp.SyncOutputChan <- string(resultCache[hittedIdx : hittedIdx+outputCompletedIdx])
 		sp.EmptySyncDirective()
 		resultCache = resultCache[:0]
 	}
