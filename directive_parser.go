@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+const (
+	EOFDefault = "<EOF>"
+	EOFCLI     = "cli>"
+)
+
 // Parser registry and shared parser errors.
 // 解析器注册表与通用错误定义。
 var (
@@ -91,6 +96,7 @@ type RawDirectiveOutputParser interface {
 	Parse(string, string) (string, error) // 第一个是cli 完整指令（含参数), 第二个是输出
 	UnmarshalTo(string, interface{}) error
 	IsJSONOutput() bool
+	EOFFlag() string
 }
 
 // RawDirective provides shared parser behavior.
@@ -156,6 +162,10 @@ func (r *RawDirective_astop) String() string {
 	return r.Name
 }
 
+func (r *RawDirective_astop) EOFFlag() string {
+	return EOFCLI
+}
+
 // Parse parses astop raw output.
 // Parse 解析 astop 原始输出。
 func (r *RawDirective_astop) Parse(_, data string) (string, error) {
@@ -188,6 +198,10 @@ func NewRawDirective_acancel() *RawDirective_acancel {
 // String 返回对应指令名。
 func (r *RawDirective_acancel) String() string {
 	return r.Name
+}
+
+func (r *RawDirective_acancel) EOFFlag() string {
+	return EOFDefault
 }
 
 // Parse parses acancel raw output.
@@ -227,6 +241,10 @@ func (r *RawDirective_sn) String() string {
 	return r.Name
 }
 
+func (r *RawDirective_sn) EOFFlag() string {
+	return EOFDefault
+}
+
 // Parse parses sn raw output.
 // Parse 解析 sn 原始输出。
 func (r *RawDirective_sn) Parse(cli, data string) (string, error) {
@@ -264,6 +282,10 @@ func (r *RawDirective_list_dir) String() string {
 	return r.Name
 }
 
+func (r *RawDirective_list_dir) EOFFlag() string {
+	return EOFDefault
+}
+
 // Parse parses list_dir raw output.
 // Parse 解析 list_dir 原始输出。
 func (r *RawDirective_list_dir) Parse(cli, data string) (string, error) {
@@ -299,6 +321,10 @@ func NewRawDirective_clean_dir() *RawDirective_clean_dir {
 // String 返回对应指令名。
 func (r *RawDirective_clean_dir) String() string {
 	return r.Name
+}
+
+func (r *RawDirective_clean_dir) EOFFlag() string {
+	return EOFCLI
 }
 
 // Parse parses clean_dir raw output.
@@ -339,6 +365,10 @@ func (r *RawDirective_delete_file) String() string {
 	return r.Name
 }
 
+func (r *RawDirective_delete_file) EOFFlag() string {
+	return EOFCLI
+}
+
 // Parse parses delete_file raw output.
 // Parse 解析 delete_file 原始输出。
 func (r *RawDirective_delete_file) Parse(cli, data string) (string, error) {
@@ -377,6 +407,10 @@ func (r *RawDirective_alive) String() string {
 	return r.Name
 }
 
+func (r *RawDirective_alive) EOFFlag() string {
+	return EOFDefault
+}
+
 // Parse parses alive raw output.
 // Parse 解析 alive 原始输出。
 func (r *RawDirective_alive) Parse(cli, data string) (string, error) {
@@ -412,6 +446,10 @@ func NewRawDirective_atime() *RawDirective_atime {
 // String 返回对应指令名。
 func (r *RawDirective_atime) String() string {
 	return r.Name
+}
+
+func (r *RawDirective_atime) EOFFlag() string {
+	return EOFDefault
 }
 
 // Parse parses atime raw output.
@@ -455,6 +493,10 @@ func (r *RawDirective_aversion) String() string {
 	return r.Name
 }
 
+func (r *RawDirective_aversion) EOFFlag() string {
+	return EOFDefault
+}
+
 // Parse parses aversion raw output.
 // Parse 解析 aversion 原始输出。
 func (r *RawDirective_aversion) Parse(cli, data string) (string, error) {
@@ -490,6 +532,10 @@ func NewRawDirective_ainsp() *RawDirective_ainsp {
 // String 返回对应指令名。
 func (r *RawDirective_ainsp) String() string {
 	return r.Name
+}
+
+func (r *RawDirective_ainsp) EOFFlag() string {
+	return EOFDefault
 }
 
 // Parse parses ainsp raw output.
@@ -531,6 +577,10 @@ func NewRawDirective_alog() *RawDirective_alog {
 // String 返回对应指令名。
 func (r *RawDirective_alog) String() string {
 	return r.Name
+}
+
+func (r *RawDirective_alog) EOFFlag() string {
+	return EOFCLI
 }
 
 // Parse parses alog raw output.

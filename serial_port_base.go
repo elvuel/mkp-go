@@ -170,30 +170,14 @@ func (sp *SerialPort) Read() (string, error) {
 			continue
 		}
 
-		// terminal signal
+		// EOF
 		var outputCompletedIdx int
 
-		if strings.HasPrefix(syncDirective, "acancel") { // monkey patch for acancel
-			pendingIdx := bytes.Index(resultCache[hittedIdx:], []byte("cli> \r\ncli> "))
-			fmt.Println("pendingIdx", pendingIdx)
-			if pendingIdx < 0 {
-				continue
-			}
-
-			interruptIdx := bytes.Index(resultCache[hittedIdx:], []byte("cli> \r\ncli> I"))
-			if interruptIdx >= 0 {
-				jsonEndIdx := bytes.Index(resultCache[hittedIdx:], []byte("}\r\r\ncli>"))
-				if jsonEndIdx < 0 {
-					continue
-				} else {
-					outputCompletedIdx = jsonEndIdx + 1
-				}
-			} else {
-				fmt.Println("no i")
-				outputCompletedIdx = bytes.Index(resultCache[hittedIdx:], []byte("cli> \r\ncli> \r"))
-			}
+		parser := GetRawDirectiveOutputParser(syncDirective)
+		if parser == nil {
+			outputCompletedIdx = bytes.Index(resultCache[hittedIdx:], []byte(EOFCLI))
 		} else {
-			outputCompletedIdx = bytes.Index(resultCache[hittedIdx:], []byte("cli>"))
+			outputCompletedIdx = bytes.Index(resultCache[hittedIdx:], []byte(parser.EOFFlag()))
 		}
 
 		if outputCompletedIdx < 0 {
