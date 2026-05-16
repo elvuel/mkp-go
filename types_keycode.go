@@ -1,6 +1,7 @@
 package mkpgo
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -99,9 +100,43 @@ func NewKpadOption() *KpadOption {
 	}
 }
 
+type kpadOptionJSON struct {
+	ModKeys KpadModKeys `json:"mod_keys"`
+	Keys    [6]string   `json:"keys"`
+	Release int         `json:"release"`
+	Delay   int         `json:"delay"`
+	Verbose bool        `json:"verbose"`
+	Async   *bool       `json:"async"`
+}
+
+// UnmarshalJSON keeps async default compatible with historical behavior.
+// UnmarshalJSON 在未显式提供 async 时保持历史默认异步行为。
+func (opt *KpadOption) UnmarshalJSON(data []byte) error {
+	raw := kpadOptionJSON{}
+	*opt = *NewKpadOption()
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	opt.ModKeys = append(KpadModKeys(nil), raw.ModKeys...)
+	opt.Keys = raw.Keys
+	opt.Release = raw.Release
+	opt.Delay = raw.Delay
+	opt.Verbose = raw.Verbose
+	if raw.Async != nil {
+		opt.Async = *raw.Async
+	}
+
+	return nil
+}
+
 // ToString converts KpadOption into CLI argument fragment.
 // ToString 将 KpadOption 转换为命令行参数片段。
 func (opt *KpadOption) ToString() string {
+	if opt == nil {
+		return ""
+	}
+
 	opts := make([]string, 0)
 	if status := opt.ModKeys.ToStatus(); status != "" {
 		opts = append(opts, "--s", status)

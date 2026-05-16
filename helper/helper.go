@@ -452,37 +452,38 @@ func AInspectContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path strin
 	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
-func KeyDown(sfport *mkpgo.SFSerialPort, key string) error {
-	return KeyDownContext(context.Background(), sfport, key)
+func KeyDown(sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
+	return KeyDownContext(context.Background(), sfport, key, opts...)
 }
 
-func KeyDownContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string) error {
-	return sendKeyDownContext(ctx, sfport, mkpgo.NewKpadOption().WithDelay(0), key)
+func KeyDownContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
+	return sendKeyDownContext(ctx, sfport, resolveKpadOption(firstKpadOption(opts...)), key)
 }
 
 // 释放
-func KeyUp(sfport *mkpgo.SFSerialPort, key string) error {
-	return KeyUpContext(context.Background(), sfport, key)
+func KeyUp(sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
+	return KeyUpContext(context.Background(), sfport, key, opts...)
 }
 
 // KeyUpContext 释放
-func KeyUpContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string) error {
-	return sendKeyUpContext(ctx, sfport, mkpgo.NewKpadOption().WithDelay(0), key)
+func KeyUpContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
+	return sendKeyUpContext(ctx, sfport, resolveKpadOption(firstKpadOption(opts...)), key)
 }
 
 // 按下释放
-func KeyTap(sfport *mkpgo.SFSerialPort, key string) error {
-	return KeyTapContext(context.Background(), sfport, key)
+func KeyTap(sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
+	return KeyTapContext(context.Background(), sfport, key, opts...)
 }
 
 // KeyTapContext 按下释放
-func KeyTapContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string) error {
+func KeyTapContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
+	opt := resolveKpadOption(firstKpadOption(opts...))
 	sleep := rand.Intn(100) + 20
-	if err := KeyDownContext(ctx, sfport, key); err != nil {
+	if err := sendKeyDownContext(ctx, sfport, opt, key); err != nil {
 		return err
 	}
 
@@ -494,24 +495,87 @@ func KeyTapContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string) 
 	case <-timer.C:
 	}
 
-	if err := KeyUpContext(ctx, sfport, key); err != nil {
+	if err := sendKeyUpContext(ctx, sfport, opt, key); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int) error {
-	return KeyPressesContext(context.Background(), sfport, keys, sleep)
+func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int, opts ...*mkpgo.KpadOption) error {
+	return KeyPressesContext(context.Background(), sfport, keys, sleep, opts...)
 }
 
-func KeyPressesContext(ctx context.Context, sfport *mkpgo.SFSerialPort, keys []string, sleep int) error {
+func KeyPressesContext(ctx context.Context, sfport *mkpgo.SFSerialPort, keys []string, sleep int, opts ...*mkpgo.KpadOption) error {
+	opt := resolveKpadOption(firstKpadOption(opts...))
 	for _, key := range keys {
-		if err := KeyTapContext(ctx, sfport, key); err != nil {
+		if err := KeyTapContext(ctx, sfport, key, opt); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func firstKpadOption(opts ...*mkpgo.KpadOption) *mkpgo.KpadOption {
+	if len(opts) == 0 {
+		return nil
+	}
+	return opts[0]
+}
+
+func resolveKpadOption(opt *mkpgo.KpadOption) *mkpgo.KpadOption {
+	if opt != nil {
+		return opt
+	}
+	return mkpgo.NewKpadOption().WithDelay(0)
+}
+
+func cloneKpadOption(opt *mkpgo.KpadOption) *mkpgo.KpadOption {
+	if opt == nil {
+		return nil
+	}
+
+	cloned := *opt
+	cloned.ModKeys = append(mkpgo.KpadModKeys(nil), opt.ModKeys...)
+	return &cloned
+}
+
+func resolveKpadReleaseOption(base *mkpgo.KpadOption, override *mkpgo.KpadOption) *mkpgo.KpadOption {
+	opt := cloneKpadOption(base)
+	if opt == nil {
+		opt = mkpgo.NewKpadOption().WithDelay(0)
+	}
+	if override != nil {
+		opt.Async = override.Async
+		opt.Verbose = override.Verbose
+	}
+	return opt
+}
+
+func firstM10Option(opts ...*mkpgo.M10Option) *mkpgo.M10Option {
+	if len(opts) == 0 {
+		return nil
+	}
+	return opts[0]
+}
+
+func cloneM10Option(opt *mkpgo.M10Option) *mkpgo.M10Option {
+	if opt == nil {
+		return nil
+	}
+
+	cloned := *opt
+	return &cloned
+}
+
+func resolveMouseReleaseOption(override *mkpgo.M10Option) *mkpgo.M10Option {
+	opt := mkpgo.NewM10Option()
+	if override != nil {
+		opt = cloneM10Option(override)
+		opt.Reset()
+	}
+	opt.SetButton(0)
+	return opt
 }
 
 func sendKeyDown(sfport *mkpgo.SFSerialPort, opt *mkpgo.KpadOption, key string) error {
@@ -547,32 +611,32 @@ func sendKeyUpContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpg
 	return nil
 }
 
-func KeypadRelease(sfport *mkpgo.SFSerialPort) error {
-	return KeypadReleaseContext(context.Background(), sfport)
+func KeypadRelease(sfport *mkpgo.SFSerialPort, opts ...*mkpgo.KpadOption) error {
+	return KeypadReleaseContext(context.Background(), sfport, opts...)
 }
 
-func KeypadReleaseContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error {
-	return sfport.KeypadContext(ctx, mkpgo.HidKpadRelease)
+func KeypadReleaseContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...*mkpgo.KpadOption) error {
+	return sfport.KeypadContext(ctx, resolveKpadReleaseOption(mkpgo.HidKpadRelease, firstKpadOption(opts...)))
 }
 
-func KeypadReleaseAll(sfport *mkpgo.SFSerialPort) error {
-	return KeypadReleaseAllContext(context.Background(), sfport)
+func KeypadReleaseAll(sfport *mkpgo.SFSerialPort, opts ...*mkpgo.KpadOption) error {
+	return KeypadReleaseAllContext(context.Background(), sfport, opts...)
 }
 
-func KeypadReleaseAllContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error {
-	if err := sfport.KeypadContext(ctx, mkpgo.HidKpadReleaseAll); err != nil {
+func KeypadReleaseAllContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...*mkpgo.KpadOption) error {
+	if err := sfport.KeypadContext(ctx, resolveKpadReleaseOption(mkpgo.HidKpadReleaseAll, firstKpadOption(opts...))); err != nil {
 		return err
 	}
 	mkpgo.ResetKpadPressedCaches()
 	return nil
 }
 
-func MouseReleaseAll(sfport *mkpgo.SFSerialPort) error {
-	return MouseReleaseAllContext(context.Background(), sfport)
+func MouseReleaseAll(sfport *mkpgo.SFSerialPort, opts ...*mkpgo.M10Option) error {
+	return MouseReleaseAllContext(context.Background(), sfport, opts...)
 }
 
-func MouseReleaseAllContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error {
-	return sfport.MouseReleaseAllContext(ctx)
+func MouseReleaseAllContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...*mkpgo.M10Option) error {
+	return sfport.Mouse10Context(ctx, resolveMouseReleaseOption(firstM10Option(opts...)))
 }
 
 func M10(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.M10Option) error {

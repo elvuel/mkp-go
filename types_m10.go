@@ -1,6 +1,7 @@
 package mkpgo
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -67,11 +68,11 @@ var (
 // M10Option is the option model for m10 mouse directive.
 // M10Option 是 m10 鼠标指令的参数模型。
 type M10Option struct {
-	Button *int
-	X      *int
-	Y      *int
-	Wheel  *int
-	Async  bool
+	Button *int `json:"button,omitempty"`
+	X      *int `json:"x,omitempty"`
+	Y      *int `json:"y,omitempty"`
+	Wheel  *int `json:"wheel,omitempty"`
+	Async  bool `json:"async"`
 	// --b: botton
 	// --x: x
 	// --y: y
@@ -83,6 +84,34 @@ type M10Option struct {
 // NewM10Option 创建空的 M10Option。
 func NewM10Option() *M10Option {
 	return &M10Option{Async: true}
+}
+
+type m10OptionJSON struct {
+	Button *int  `json:"button,omitempty"`
+	X      *int  `json:"x,omitempty"`
+	Y      *int  `json:"y,omitempty"`
+	Wheel  *int  `json:"wheel,omitempty"`
+	Async  *bool `json:"async"`
+}
+
+// UnmarshalJSON keeps async default compatible with historical behavior.
+// UnmarshalJSON 在未显式提供 async 时保持历史默认异步行为。
+func (opt *M10Option) UnmarshalJSON(data []byte) error {
+	raw := m10OptionJSON{}
+	*opt = *NewM10Option()
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	opt.Button = raw.Button
+	opt.X = raw.X
+	opt.Y = raw.Y
+	opt.Wheel = raw.Wheel
+	if raw.Async != nil {
+		opt.Async = *raw.Async
+	}
+
+	return nil
 }
 
 // CheckMouseButton normalizes button text to M10Button.
@@ -239,6 +268,10 @@ func (opt *M10Option) WithAsync(async bool) *M10Option {
 // ToString builds CLI args fragment for m10 option.
 // ToString 构建 m10 选项的命令行参数片段。
 func (opt *M10Option) ToString() string {
+	if opt == nil {
+		return ""
+	}
+
 	directives := make([]string, 0)
 	if opt.Button != nil {
 		directives = append(directives, "--b", fmt.Sprintf("%d", *opt.Button))
