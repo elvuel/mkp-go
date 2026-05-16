@@ -100,6 +100,8 @@ func NewKpadOption() *KpadOption {
 	}
 }
 
+// kpadOptionJSON is the JSON helper structure used during custom decoding.
+// kpadOptionJSON 是自定义解码时使用的 JSON 辅助结构。
 type kpadOptionJSON struct {
 	ModKeys KpadModKeys `json:"mod_keys"`
 	Keys    [6]string   `json:"keys"`

@@ -452,30 +452,38 @@ func AInspectContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path strin
 	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
+// KeyDown presses one key using optional kpad settings.
+// KeyDown 使用可选的 kpad 配置按下单个按键。
 func KeyDown(sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
 	return KeyDownContext(context.Background(), sfport, key, opts...)
 }
 
+// KeyDownContext presses one key using optional kpad settings and context.
+// KeyDownContext 使用可选的 kpad 配置和 context 按下单个按键。
 func KeyDownContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
 	return sendKeyDownContext(ctx, sfport, resolveKpadOption(firstKpadOption(opts...)), key)
 }
 
-// 释放
+// KeyUp releases one key using optional kpad settings.
+// KeyUp 使用可选的 kpad 配置释放单个按键。
 func KeyUp(sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
 	return KeyUpContext(context.Background(), sfport, key, opts...)
 }
 
-// KeyUpContext 释放
+// KeyUpContext releases one key using optional kpad settings and context.
+// KeyUpContext 使用可选的 kpad 配置和 context 释放单个按键。
 func KeyUpContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
 	return sendKeyUpContext(ctx, sfport, resolveKpadOption(firstKpadOption(opts...)), key)
 }
 
-// 按下释放
+// KeyTap performs a press-then-release for one key using optional kpad settings.
+// KeyTap 使用可选的 kpad 配置对单个按键执行按下再释放。
 func KeyTap(sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
 	return KeyTapContext(context.Background(), sfport, key, opts...)
 }
 
-// KeyTapContext 按下释放
+// KeyTapContext performs a press-then-release for one key using optional kpad settings and context.
+// KeyTapContext 使用可选的 kpad 配置和 context 对单个按键执行按下再释放。
 func KeyTapContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string, opts ...*mkpgo.KpadOption) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -502,10 +510,14 @@ func KeyTapContext(ctx context.Context, sfport *mkpgo.SFSerialPort, key string, 
 	return nil
 }
 
+// KeyPresses taps keys sequentially using optional kpad settings.
+// KeyPresses 使用可选的 kpad 配置依次点击多个按键。
 func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int, opts ...*mkpgo.KpadOption) error {
 	return KeyPressesContext(context.Background(), sfport, keys, sleep, opts...)
 }
 
+// KeyPressesContext taps keys sequentially using optional kpad settings and context.
+// KeyPressesContext 使用可选的 kpad 配置和 context 依次点击多个按键。
 func KeyPressesContext(ctx context.Context, sfport *mkpgo.SFSerialPort, keys []string, sleep int, opts ...*mkpgo.KpadOption) error {
 	opt := resolveKpadOption(firstKpadOption(opts...))
 	for _, key := range keys {
@@ -516,6 +528,8 @@ func KeyPressesContext(ctx context.Context, sfport *mkpgo.SFSerialPort, keys []s
 	return nil
 }
 
+// firstKpadOption returns the first provided kpad option, if any.
+// firstKpadOption 返回传入的第一个 kpad 配置（若存在）。
 func firstKpadOption(opts ...*mkpgo.KpadOption) *mkpgo.KpadOption {
 	if len(opts) == 0 {
 		return nil
@@ -523,6 +537,8 @@ func firstKpadOption(opts ...*mkpgo.KpadOption) *mkpgo.KpadOption {
 	return opts[0]
 }
 
+// resolveKpadOption returns a usable kpad option, filling in the default when nil.
+// resolveKpadOption 返回可用的 kpad 配置；若为 nil 则补默认值。
 func resolveKpadOption(opt *mkpgo.KpadOption) *mkpgo.KpadOption {
 	if opt != nil {
 		return opt
@@ -530,6 +546,8 @@ func resolveKpadOption(opt *mkpgo.KpadOption) *mkpgo.KpadOption {
 	return mkpgo.NewKpadOption().WithDelay(0)
 }
 
+// cloneKpadOption makes a shallow copy plus slice copy for mutable kpad fields.
+// cloneKpadOption 复制 kpad 配置，并拷贝可变切片字段。
 func cloneKpadOption(opt *mkpgo.KpadOption) *mkpgo.KpadOption {
 	if opt == nil {
 		return nil
@@ -540,6 +558,8 @@ func cloneKpadOption(opt *mkpgo.KpadOption) *mkpgo.KpadOption {
 	return &cloned
 }
 
+// resolveKpadReleaseOption clones a preset release option and applies runtime overrides.
+// resolveKpadReleaseOption 复制预置释放配置，并合并运行时覆盖项。
 func resolveKpadReleaseOption(base *mkpgo.KpadOption, override *mkpgo.KpadOption) *mkpgo.KpadOption {
 	opt := cloneKpadOption(base)
 	if opt == nil {
@@ -552,6 +572,8 @@ func resolveKpadReleaseOption(base *mkpgo.KpadOption, override *mkpgo.KpadOption
 	return opt
 }
 
+// firstM10Option returns the first provided m10 option, if any.
+// firstM10Option 返回传入的第一个 m10 配置（若存在）。
 func firstM10Option(opts ...*mkpgo.M10Option) *mkpgo.M10Option {
 	if len(opts) == 0 {
 		return nil
@@ -559,6 +581,8 @@ func firstM10Option(opts ...*mkpgo.M10Option) *mkpgo.M10Option {
 	return opts[0]
 }
 
+// cloneM10Option makes a shallow copy of one m10 option.
+// cloneM10Option 浅拷贝一个 m10 配置。
 func cloneM10Option(opt *mkpgo.M10Option) *mkpgo.M10Option {
 	if opt == nil {
 		return nil
@@ -568,6 +592,8 @@ func cloneM10Option(opt *mkpgo.M10Option) *mkpgo.M10Option {
 	return &cloned
 }
 
+// resolveMouseReleaseOption builds a release-all m10 option while preserving overrides such as async.
+// resolveMouseReleaseOption 构建鼠标全释放的 m10 配置，同时保留 async 等覆盖项。
 func resolveMouseReleaseOption(override *mkpgo.M10Option) *mkpgo.M10Option {
 	opt := mkpgo.NewM10Option()
 	if override != nil {
@@ -578,10 +604,14 @@ func resolveMouseReleaseOption(override *mkpgo.M10Option) *mkpgo.M10Option {
 	return opt
 }
 
+// sendKeyDown sends a prepared key-down sequence.
+// sendKeyDown 发送准备好的按下按键序列。
 func sendKeyDown(sfport *mkpgo.SFSerialPort, opt *mkpgo.KpadOption, key string) error {
 	return sendKeyDownContext(context.Background(), sfport, opt, key)
 }
 
+// sendKeyDownContext sends a prepared key-down sequence with context.
+// sendKeyDownContext 使用 context 发送准备好的按下按键序列。
 func sendKeyDownContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.KpadOption, key string) error {
 	if strings.TrimSpace(key) == "" {
 		return nil
@@ -591,10 +621,14 @@ func sendKeyDownContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mk
 	return sfport.KeypadContext(ctx, downOpt)
 }
 
+// sendKeyUp sends a prepared key-up sequence.
+// sendKeyUp 发送准备好的释放按键序列。
 func sendKeyUp(sfport *mkpgo.SFSerialPort, opt *mkpgo.KpadOption, key string) error {
 	return sendKeyUpContext(context.Background(), sfport, opt, key)
 }
 
+// sendKeyUpContext sends a prepared key-up sequence with context.
+// sendKeyUpContext 使用 context 发送准备好的释放按键序列。
 func sendKeyUpContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.KpadOption, key string) error {
 	releaseOpt, remainHoldOpt := opt.KeyUp(key)
 	if releaseOpt != nil {
@@ -611,18 +645,26 @@ func sendKeyUpContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpg
 	return nil
 }
 
+// KeypadRelease releases current keyboard slots to NONE using optional kpad settings.
+// KeypadRelease 使用可选的 kpad 配置将当前键位槽释放为 NONE。
 func KeypadRelease(sfport *mkpgo.SFSerialPort, opts ...*mkpgo.KpadOption) error {
 	return KeypadReleaseContext(context.Background(), sfport, opts...)
 }
 
+// KeypadReleaseContext releases current keyboard slots to NONE using optional kpad settings and context.
+// KeypadReleaseContext 使用可选的 kpad 配置和 context 将当前键位槽释放为 NONE。
 func KeypadReleaseContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...*mkpgo.KpadOption) error {
 	return sfport.KeypadContext(ctx, resolveKpadReleaseOption(mkpgo.HidKpadRelease, firstKpadOption(opts...)))
 }
 
+// KeypadReleaseAll sends a full release packet using optional kpad settings.
+// KeypadReleaseAll 使用可选的 kpad 配置发送键盘全释放包。
 func KeypadReleaseAll(sfport *mkpgo.SFSerialPort, opts ...*mkpgo.KpadOption) error {
 	return KeypadReleaseAllContext(context.Background(), sfport, opts...)
 }
 
+// KeypadReleaseAllContext sends a full release packet using optional kpad settings and context.
+// KeypadReleaseAllContext 使用可选的 kpad 配置和 context 发送键盘全释放包。
 func KeypadReleaseAllContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...*mkpgo.KpadOption) error {
 	if err := sfport.KeypadContext(ctx, resolveKpadReleaseOption(mkpgo.HidKpadReleaseAll, firstKpadOption(opts...))); err != nil {
 		return err
@@ -631,14 +673,20 @@ func KeypadReleaseAllContext(ctx context.Context, sfport *mkpgo.SFSerialPort, op
 	return nil
 }
 
+// MouseReleaseAll releases all mouse buttons using optional m10 settings.
+// MouseReleaseAll 使用可选的 m10 配置释放全部鼠标按键。
 func MouseReleaseAll(sfport *mkpgo.SFSerialPort, opts ...*mkpgo.M10Option) error {
 	return MouseReleaseAllContext(context.Background(), sfport, opts...)
 }
 
+// MouseReleaseAllContext releases all mouse buttons using optional m10 settings and context.
+// MouseReleaseAllContext 使用可选的 m10 配置和 context 释放全部鼠标按键。
 func MouseReleaseAllContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...*mkpgo.M10Option) error {
 	return sfport.Mouse10Context(ctx, resolveMouseReleaseOption(firstM10Option(opts...)))
 }
 
+// M10 sends one m10 directive with context.
+// M10 使用 context 发送一条 m10 指令。
 func M10(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.M10Option) error {
 	return sfport.Mouse10Context(ctx, opt)
 }

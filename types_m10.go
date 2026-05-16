@@ -86,6 +86,8 @@ func NewM10Option() *M10Option {
 	return &M10Option{Async: true}
 }
 
+// m10OptionJSON is the JSON helper structure used during custom decoding.
+// m10OptionJSON 是自定义解码时使用的 JSON 辅助结构。
 type m10OptionJSON struct {
 	Button *int  `json:"button,omitempty"`
 	X      *int  `json:"x,omitempty"`

@@ -14,6 +14,8 @@ type Controller struct {
 	MouseMovement *mkpgo.MouseMovementSimulator
 }
 
+// sleepMs sleeps for the given milliseconds when positive.
+// sleepMs 在毫秒值大于 0 时休眠指定时长。
 func sleepMs(ms int) {
 	if ms <= 0 {
 		return
@@ -21,6 +23,8 @@ func sleepMs(ms int) {
 	time.Sleep(time.Duration(ms) * time.Millisecond)
 }
 
+// NewController creates a controller bound to one serial port.
+// NewController 创建并绑定一个串口控制器。
 func NewController(sfport *mkpgo.SFSerialPort) *Controller {
 	ctrl := &Controller{
 		sfport:        sfport,
@@ -32,6 +36,8 @@ func NewController(sfport *mkpgo.SFSerialPort) *Controller {
 	return ctrl
 }
 
+// firstKpadOption returns the first provided kpad option, if any.
+// firstKpadOption 返回传入的第一个 kpad 配置（若存在）。
 func firstKpadOption(opts ...*mkpgo.KpadOption) *mkpgo.KpadOption {
 	if len(opts) == 0 {
 		return nil
@@ -39,6 +45,8 @@ func firstKpadOption(opts ...*mkpgo.KpadOption) *mkpgo.KpadOption {
 	return opts[0]
 }
 
+// firstM10Option returns the first provided m10 option, if any.
+// firstM10Option 返回传入的第一个 m10 配置（若存在）。
 func firstM10Option(opts ...*mkpgo.M10Option) *mkpgo.M10Option {
 	if len(opts) == 0 {
 		return nil
@@ -46,6 +54,8 @@ func firstM10Option(opts ...*mkpgo.M10Option) *mkpgo.M10Option {
 	return opts[0]
 }
 
+// controllerM10Async resolves async mode for controller mouse helpers.
+// controllerM10Async 解析控制器鼠标辅助方法的 async 模式。
 func controllerM10Async(opts ...*mkpgo.M10Option) bool {
 	if opt := firstM10Option(opts...); opt != nil {
 		return opt.Async
@@ -53,6 +63,8 @@ func controllerM10Async(opts ...*mkpgo.M10Option) bool {
 	return true
 }
 
+// BindSFPort binds a new serial port and updates movement simulator binding.
+// BindSFPort 绑定新的串口，并同步更新移动模拟器的端口绑定。
 func (c *Controller) BindSFPort(port *mkpgo.SFSerialPort) {
 	c.sfport = port
 	if c.MouseMovement != nil {
@@ -60,10 +72,14 @@ func (c *Controller) BindSFPort(port *mkpgo.SFSerialPort) {
 	}
 }
 
+// Open opens the bound serial port.
+// Open 打开已绑定的串口。
 func (c *Controller) Open() error {
 	return c.sfport.Open()
 }
 
+// Close closes the bound serial port.
+// Close 关闭已绑定的串口。
 func (c *Controller) Close() {
 	c.sfport.Close()
 }
@@ -143,32 +159,38 @@ func (c *Controller) AInspect(path string) (*mkpgo.LogInfo, error) {
 	return helper.AInspect(c.sfport, path)
 }
 
-// helper func KeyDown(sfport *mkpgo.SFSerialPort, key string) error
+// KeyDown proxies helper.KeyDown and accepts optional kpad settings.
+// KeyDown 代理 helper.KeyDown，并接受可选的 kpad 配置。
 func (c *Controller) KeyDown(key string, opts ...*mkpgo.KpadOption) error {
 	return helper.KeyDown(c.sfport, key, opts...)
 }
 
-// helper func KeyUp(sfport *mkpgo.SFSerialPort, key string) error
+// KeyUp proxies helper.KeyUp and accepts optional kpad settings.
+// KeyUp 代理 helper.KeyUp，并接受可选的 kpad 配置。
 func (c *Controller) KeyUp(key string, opts ...*mkpgo.KpadOption) error {
 	return helper.KeyUp(c.sfport, key, opts...)
 }
 
-// helper func KeyTap(sfport *mkpgo.SFSerialPort, key string) error
+// KeyTap proxies helper.KeyTap and accepts optional kpad settings.
+// KeyTap 代理 helper.KeyTap，并接受可选的 kpad 配置。
 func (c *Controller) KeyTap(key string, opts ...*mkpgo.KpadOption) error {
 	return helper.KeyTap(c.sfport, key, opts...)
 }
 
-// helper func KeyPresses(sfport *mkpgo.SFSerialPort, keys []string, sleep int) error
+// KeyPresses proxies helper.KeyPresses and accepts optional kpad settings.
+// KeyPresses 代理 helper.KeyPresses，并接受可选的 kpad 配置。
 func (c *Controller) KeyPresses(keys []string, sleep int, opts ...*mkpgo.KpadOption) error {
 	return helper.KeyPresses(c.sfport, keys, sleep, opts...)
 }
 
-// helper func KeypadRelease(sfport *mkpgo.SFSerialPort) error
+// KeypadRelease proxies helper.KeypadRelease and accepts optional kpad settings.
+// KeypadRelease 代理 helper.KeypadRelease，并接受可选的 kpad 配置。
 func (c *Controller) KeypadRelease(opts ...*mkpgo.KpadOption) error {
 	return helper.KeypadRelease(c.sfport, opts...)
 }
 
-// helper func KeypadReleaseAll(sfport *mkpgo.SFSerialPort) error
+// KeypadReleaseAll proxies helper.KeypadReleaseAll and accepts optional kpad settings.
+// KeypadReleaseAll 代理 helper.KeypadReleaseAll，并接受可选的 kpad 配置。
 func (c *Controller) KeypadReleaseAll(opts ...*mkpgo.KpadOption) error {
 	return helper.KeypadReleaseAll(c.sfport, opts...)
 }
@@ -203,6 +225,8 @@ func (c *Controller) MouseClick(args ...interface{}) {
 	c.MouseClickWithOption(button, double, sleepInterval, override)
 }
 
+// MouseClickWithOption clicks one mouse button and optionally performs a double click with m10 override.
+// MouseClickWithOption 点击鼠标按键，并可通过 m10 覆盖配置执行双击。
 func (c *Controller) MouseClickWithOption(button int, double bool, sleepInterval int, override *mkpgo.M10Option) {
 	opt := mkpgo.NewM10Option().WithAsync(controllerM10Async(override))
 	opt.WithButton(button).SetX(0).SetY(0)
@@ -232,6 +256,8 @@ func (c *Controller) MouseScroll(dir string, steps int, sleepInterval int) error
 	return c.MouseScrollWithOption(dir, steps, sleepInterval, nil)
 }
 
+// MouseScrollWithOption scrolls the wheel using an optional m10 override.
+// MouseScrollWithOption 使用可选的 m10 覆盖配置执行滚轮滚动。
 func (c *Controller) MouseScrollWithOption(dir string, steps int, sleepInterval int, override *mkpgo.M10Option) error {
 	opt := mkpgo.NewM10Option().WithAsync(controllerM10Async(override))
 
@@ -270,6 +296,8 @@ func (c *Controller) MouseScrollWithButton(dir string, steps int, button string,
 	return c.MouseScrollWithButtonOption(dir, steps, button, sleepInterval, nil)
 }
 
+// MouseScrollWithButtonOption scrolls the wheel while optionally holding a mouse button with m10 override.
+// MouseScrollWithButtonOption 使用 m10 覆盖配置在按住鼠标键时执行滚轮滚动。
 func (c *Controller) MouseScrollWithButtonOption(dir string, steps int, button string, sleepInterval int, override *mkpgo.M10Option) error {
 	opt := mkpgo.NewM10Option().WithAsync(controllerM10Async(override))
 
@@ -313,6 +341,8 @@ func (c *Controller) MouseScrollWithButtonOption(dir string, steps int, button s
 	return nil
 }
 
+// MouseDown presses one mouse button using optional m10 settings.
+// MouseDown 使用可选的 m10 配置按下一个鼠标按键。
 func (c *Controller) MouseDown(button string, opts ...*mkpgo.M10Option) error {
 	opt := mkpgo.NewM10Option().WithAsync(controllerM10Async(opts...))
 	opt.WithButton(int(mkpgo.CheckMouseButton(button))).SetX(0).SetY(0)
@@ -320,6 +350,8 @@ func (c *Controller) MouseDown(button string, opts ...*mkpgo.M10Option) error {
 	return nil
 }
 
+// MouseReleaseAll releases all mouse buttons using optional m10 settings.
+// MouseReleaseAll 使用可选的 m10 配置释放全部鼠标按键。
 func (c *Controller) MouseReleaseAll(opts ...*mkpgo.M10Option) error {
 	opt := mkpgo.NewM10Option().WithAsync(controllerM10Async(opts...))
 	opt.WithoutButton().SetX(0).SetY(0)
@@ -327,10 +359,14 @@ func (c *Controller) MouseReleaseAll(opts ...*mkpgo.M10Option) error {
 	return nil
 }
 
+// MouseUp is an alias of MouseReleaseAll.
+// MouseUp 是 MouseReleaseAll 的别名。
 func (c *Controller) MouseUp(opts ...*mkpgo.M10Option) error {
 	return c.MouseReleaseAll(opts...)
 }
 
+// M10Move sends one prepared m10 directive.
+// M10Move 发送一条准备好的 m10 指令。
 func (c *Controller) M10Move(opt *mkpgo.M10Option) {
 	helper.M10(context.Background(), c.sfport, opt)
 }
