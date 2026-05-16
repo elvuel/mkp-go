@@ -574,3 +574,7 @@ func MouseReleaseAll(sfport *mkpgo.SFSerialPort) error {
 func MouseReleaseAllContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error {
 	return sfport.MouseReleaseAllContext(ctx)
 }
+
+func M10(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.M10Option) error {
+	return sfport.Mouse10Context(ctx, opt)
+}

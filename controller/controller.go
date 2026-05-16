@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"math/rand"
 	"time"
 
@@ -289,6 +290,15 @@ func (c *Controller) MouseReleaseAll() error {
 
 func (c *Controller) MouseUp() error {
 	return c.MouseReleaseAll()
+}
+
+func (c *Controller) M10Move(button string, relX, relY int) {
+	opt := mkpgo.NewM10Option().WithButton(
+		int(mkpgo.CheckMouseButton(button)),
+	)
+	opt.X = &relX
+	opt.Y = &relY
+	helper.M10(context.Background(), c.sfport, opt)
 }
 
 // MouseMove  Move the mouse to the specified position relative to the current position.
