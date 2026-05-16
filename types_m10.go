@@ -71,6 +71,7 @@ type M10Option struct {
 	X      *int
 	Y      *int
 	Wheel  *int
+	Async  bool
 	// --b: botton
 	// --x: x
 	// --y: y
@@ -81,7 +82,7 @@ type M10Option struct {
 // NewM10Option creates an empty M10Option.
 // NewM10Option 创建空的 M10Option。
 func NewM10Option() *M10Option {
-	return &M10Option{}
+	return &M10Option{Async: true}
 }
 
 // CheckMouseButton normalizes button text to M10Button.
@@ -225,6 +226,13 @@ func (opt *M10Option) SetY(v int) *M10Option {
 // SetWheel 设置滚轮位移值。
 func (opt *M10Option) SetWheel(v int) *M10Option {
 	opt.Wheel = &v
+	return opt
+}
+
+// WithAsync controls whether m10 uses async send mode.
+// WithAsync 控制 m10 是否使用异步发送模式。
+func (opt *M10Option) WithAsync(async bool) *M10Option {
+	opt.Async = async
 	return opt
 }
 

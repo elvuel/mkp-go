@@ -12,10 +12,10 @@ import (
 var (
 	// ModKeyNames lists supported modifier key names.
 	// ModKeyNames 定义支持的修饰键名称集合。
-	ModKeyNames      KpadModKeys = []string{"MOD_LCTRL", "MOD_LSHIFT", "MOD_LALT", "MOD_LMETA", "MOD_RCTRL", "MOD_RSHIFT", "MOD_RALT", "MOD_RMETA"}
+	ModKeyNames KpadModKeys = []string{"MOD_LCTRL", "MOD_LSHIFT", "MOD_LALT", "MOD_LMETA", "MOD_RCTRL", "MOD_RSHIFT", "MOD_RALT", "MOD_RMETA"}
 	// NodKeyShortNames is accepted short form list for modifier keys.
 	// NodKeyShortNames 定义可接受的修饰键短名称。
-	NodKeyShortNames             = []string{"LCTRL", "LSHIFT", "LALT", "LMETA", "RCTRL", "RSHIFT", "RALT", "RMETA"}
+	NodKeyShortNames = []string{"LCTRL", "LSHIFT", "LALT", "LMETA", "RCTRL", "RSHIFT", "RALT", "RMETA"}
 )
 
 // KpadModKeys is a helper type for modifier-key operations.
@@ -78,6 +78,8 @@ type KpadOption struct {
 	Delay int `json:"delay"`
 	// 输出详情
 	Verbose bool `json:"verbose"`
+	// 是否异步发送，true: SendDirectiveAsync, false: SendDirective
+	Async bool `json:"async"`
 
 	// commitKpadStateFn runs after successful kpad send.
 	// commitKpadStateFn 在 kpad 发送成功后提交本地状态变更。
@@ -93,6 +95,7 @@ func NewKpadOption() *KpadOption {
 		Release: 0,
 		Delay:   0,
 		Verbose: false,
+		Async:   true,
 	}
 }
 
@@ -204,6 +207,13 @@ func (opt *KpadOption) WithVerbose(verbose bool) *KpadOption {
 	return opt
 }
 
+// WithAsync controls whether kpad uses async send mode.
+// WithAsync 控制 kpad 是否使用异步发送模式。
+func (opt *KpadOption) WithAsync(async bool) *KpadOption {
+	opt.Async = async
+	return opt
+}
+
 // WithModKeys sets modifier keys directly.
 // WithModKeys 直接设置修饰键集合。
 func (opt *KpadOption) WithModKeys(modKeys []string) *KpadOption {
@@ -292,6 +302,7 @@ func (opt *KpadOption) KeyUp(key string) (*KpadOption, *KpadOption) {
 	releaseOpt := NewKpadOption().
 		WithDelay(opt.Delay).
 		WithVerbose(opt.Verbose).
+		WithAsync(opt.Async).
 		WithKeys(keys).
 		WithAutoRelease()
 	if hasKpadModKey(keys) {
@@ -300,7 +311,8 @@ func (opt *KpadOption) KeyUp(key string) (*KpadOption, *KpadOption) {
 
 	remainHoldOpt := NewKpadOption().
 		WithDelay(opt.Delay).
-		WithVerbose(opt.Verbose)
+		WithVerbose(opt.Verbose).
+		WithAsync(opt.Async)
 
 	if len(remainKeys) == 0 {
 		remainHoldOpt.WithKey("NONE").WithHold()

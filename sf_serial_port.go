@@ -248,7 +248,11 @@ func (sp *SFSerialPort) Mouse10Context(ctx context.Context, opt *M10Option) erro
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-	return sp.SendDirectiveAsyncContext(ctx, directive)
+	if opt != nil && opt.Async {
+		return sp.SendDirectiveAsyncContext(ctx, directive)
+	}
+	_, err := sp.SendDirectiveContext(ctx, directive)
+	return err
 }
 
 // MouseReleaseAll releases all mouse buttons.
@@ -260,7 +264,7 @@ func (sp *SFSerialPort) MouseReleaseAll() error {
 // MouseReleaseAllContext releases all mouse buttons.
 // MouseReleaseAllContext 释放全部鼠标按键状态，支持 context 取消。
 func (sp *SFSerialPort) MouseReleaseAllContext(ctx context.Context) error {
-	btnReleaseOpt := &M10Option{}
+	btnReleaseOpt := NewM10Option()
 	btnReleaseOpt.SetButton(0)
 	return sp.Mouse10Context(ctx, btnReleaseOpt)
 }
@@ -278,7 +282,13 @@ func (sp *SFSerialPort) KeypadContext(ctx context.Context, opt *KpadOption) erro
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-	if err := sp.SendDirectiveAsyncContext(ctx, directive); err != nil {
+	var err error
+	if opt != nil && opt.Async {
+		err = sp.SendDirectiveAsyncContext(ctx, directive)
+	} else {
+		_, err = sp.SendDirectiveContext(ctx, directive)
+	}
+	if err != nil {
 		return err
 	}
 	opt.commitKpadState()
