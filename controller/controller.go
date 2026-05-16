@@ -292,12 +292,7 @@ func (c *Controller) MouseUp() error {
 	return c.MouseReleaseAll()
 }
 
-func (c *Controller) M10Move(button string, relX, relY int) {
-	opt := mkpgo.NewM10Option().WithButton(
-		int(mkpgo.CheckMouseButton(button)),
-	)
-	opt.X = &relX
-	opt.Y = &relY
+func (c *Controller) M10Move(opt *mkpgo.M10Option) {
 	helper.M10(context.Background(), c.sfport, opt)
 }
 
