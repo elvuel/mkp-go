@@ -448,6 +448,8 @@ err = sfport.MouseReleaseAll()
 
 // Synchronous send, wait for completion but ignore output.
 err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithAsync(false))
+// or:
+err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithSyncIgnoreOutput(true))
 ```
 
 ### `M10Option` builder methods
@@ -466,7 +468,8 @@ err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithAsync(false))
 | `SetX(v)` | Set `--x`. |
 | `SetY(v)` | Set `--y`. |
 | `SetWheel(v)` | Set `--w`. |
-| `WithAsync(async)` | Control sync/async behavior. |
+| `WithAsync(async)` | Control sync/async behavior; `false` is equivalent to sync-ignore-output mode. |
+| `WithSyncIgnoreOutput(syncIgnoreOutput)` | Control synchronous sending while ignoring output. |
 | `Reset()` | Clear Button/X/Y/Wheel fields. |
 | `ToString()` | Build the CLI argument fragment. |
 
@@ -569,7 +572,8 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `WithAutoRelease()` | Set `Release=1`, meaning auto-release. |
 | `WithDuration(duration)` | If `duration > 1`, set `Release=duration`. |
 | `WithVerbose(verbose)` | Control `--v 1`. |
-| `WithAsync(async)` | Control sync/async behavior. |
+| `WithAsync(async)` | Control sync/async behavior; `false` is equivalent to sync-ignore-output mode. |
+| `WithSyncIgnoreOutput(syncIgnoreOutput)` | Control synchronous sending while ignoring output. |
 | `KeyDown(key)` | Build a hold packet from the current local cache plus the newly pressed key; commit cache after successful send. |
 | `KeyUp(key)` | Build two packets: one to release the target key and one to keep remaining keys held. |
 | `ToString()` | Build the CLI argument fragment. |

@@ -68,11 +68,12 @@ var (
 // M10Option is the option model for m10 mouse directive.
 // M10Option 是 m10 鼠标指令的参数模型。
 type M10Option struct {
-	Button *int `json:"button,omitempty"`
-	X      *int `json:"x,omitempty"`
-	Y      *int `json:"y,omitempty"`
-	Wheel  *int `json:"wheel,omitempty"`
-	Async  bool `json:"async"`
+	Button           *int `json:"button,omitempty"`
+	X                *int `json:"x,omitempty"`
+	Y                *int `json:"y,omitempty"`
+	Wheel            *int `json:"wheel,omitempty"`
+	Async            bool `json:"async"`
+	SyncIgnoreOutput bool `json:"sync_ignore_output,omitempty"`
 	// --b: botton
 	// --x: x
 	// --y: y
@@ -89,11 +90,12 @@ func NewM10Option() *M10Option {
 // m10OptionJSON is the JSON helper structure used during custom decoding.
 // m10OptionJSON 是自定义解码时使用的 JSON 辅助结构。
 type m10OptionJSON struct {
-	Button *int  `json:"button,omitempty"`
-	X      *int  `json:"x,omitempty"`
-	Y      *int  `json:"y,omitempty"`
-	Wheel  *int  `json:"wheel,omitempty"`
-	Async  *bool `json:"async"`
+	Button           *int  `json:"button,omitempty"`
+	X                *int  `json:"x,omitempty"`
+	Y                *int  `json:"y,omitempty"`
+	Wheel            *int  `json:"wheel,omitempty"`
+	Async            *bool `json:"async"`
+	SyncIgnoreOutput *bool `json:"sync_ignore_output"`
 }
 
 // UnmarshalJSON keeps async default compatible with historical behavior.
@@ -110,7 +112,10 @@ func (opt *M10Option) UnmarshalJSON(data []byte) error {
 	opt.Y = raw.Y
 	opt.Wheel = raw.Wheel
 	if raw.Async != nil {
-		opt.Async = *raw.Async
+		opt.WithAsync(*raw.Async)
+	}
+	if raw.SyncIgnoreOutput != nil {
+		opt.WithSyncIgnoreOutput(*raw.SyncIgnoreOutput)
 	}
 
 	return nil
@@ -264,7 +269,28 @@ func (opt *M10Option) SetWheel(v int) *M10Option {
 // WithAsync 控制 m10 是否使用异步发送模式。
 func (opt *M10Option) WithAsync(async bool) *M10Option {
 	opt.Async = async
+	opt.SyncIgnoreOutput = !async
 	return opt
+}
+
+// WithSyncIgnoreOutput controls synchronous send mode that waits for completion and discards output.
+// WithSyncIgnoreOutput 控制同步发送且忽略输出的模式。
+func (opt *M10Option) WithSyncIgnoreOutput(syncIgnoreOutput bool) *M10Option {
+	opt.SyncIgnoreOutput = syncIgnoreOutput
+	opt.Async = !syncIgnoreOutput
+	return opt
+}
+
+// IsAsync reports whether m10 should be sent asynchronously.
+// IsAsync 返回 m10 是否应按异步模式发送。
+func (opt *M10Option) IsAsync() bool {
+	return opt == nil || (opt.Async && !opt.SyncIgnoreOutput)
+}
+
+// IsSyncIgnoreOutput reports whether m10 should wait for completion while ignoring output.
+// IsSyncIgnoreOutput 返回 m10 是否应同步等待完成并忽略输出。
+func (opt *M10Option) IsSyncIgnoreOutput() bool {
+	return opt != nil && (opt.SyncIgnoreOutput || !opt.Async)
 }
 
 // ToString builds CLI args fragment for m10 option.

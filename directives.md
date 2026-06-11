@@ -448,6 +448,8 @@ err = sfport.MouseReleaseAll()
 
 // 同步发送，等待完成但忽略输出
 err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithAsync(false))
+// 或
+err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithSyncIgnoreOutput(true))
 ```
 
 ### `M10Option` 构建方法索引
@@ -466,7 +468,8 @@ err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithAsync(false))
 | `SetX(v)` | 设置 `--x`。 |
 | `SetY(v)` | 设置 `--y`。 |
 | `SetWheel(v)` | 设置 `--w`。 |
-| `WithAsync(async)` | 控制同步/异步。 |
+| `WithAsync(async)` | 控制同步/异步；`false` 时等价于同步忽略输出。 |
+| `WithSyncIgnoreOutput(syncIgnoreOutput)` | 控制同步发送并忽略输出。 |
 | `Reset()` | 清空 Button/X/Y/Wheel。 |
 | `ToString()` | 输出 CLI 参数片段。 |
 
@@ -569,7 +572,8 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `WithAutoRelease()` | 设置 `Release=1`，表示自动释放。 |
 | `WithDuration(duration)` | `duration > 1` 时设置 `Release=duration`。 |
 | `WithVerbose(verbose)` | 控制 `--v 1`。 |
-| `WithAsync(async)` | 控制同步/异步。 |
+| `WithAsync(async)` | 控制同步/异步；`false` 时等价于同步忽略输出。 |
+| `WithSyncIgnoreOutput(syncIgnoreOutput)` | 控制同步发送并忽略输出。 |
 | `KeyDown(key)` | 基于本地缓存生成“按下并保持”包，并在发送成功后提交缓存。 |
 | `KeyUp(key)` | 生成“释放目标键”和“保持剩余键”两个包。 |
 | `ToString()` | 输出 CLI 参数片段。 |

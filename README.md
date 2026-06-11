@@ -109,6 +109,8 @@ err = sfport.MouseReleaseAll()
 
 // 同步发送：等待设备完成，但忽略 m10 输出
 err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithAsync(false))
+// 或
+err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithSyncIgnoreOutput(true))
 ```
 
 ### 键盘示例
@@ -194,7 +196,7 @@ mkp-go 支持三类发送模式：
 ### 注意事项
 
 - 使用同步指令时，请确保 `SyncOuputEnabled=true` 且已执行 `go sfport.Read()`。
-- `m10` / `kpad` 默认异步发送；如需串行保证完成，可通过 `WithAsync(false)` 切换为同步等待。
+- `m10` / `kpad` 默认异步发送；如需串行保证完成，可通过 `WithAsync(false)` 或 `WithSyncIgnoreOutput(true)` 切换为同步等待且忽略输出。
 - 文件删除/清理 helper 默认限制在 `/eMMC/applog` 下，避免误操作设备其他路径。
 - 默认串口配置来自 `NewSFSerialPort()`，实际使用时通常需要修改 `Name`、`VID`、`PID`、`SerialNum` 等字段。
 - 具体固件是否支持某个指令，以设备固件版本为准。

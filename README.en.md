@@ -111,6 +111,8 @@ err = sfport.MouseReleaseAll()
 
 // Synchronous send: wait for completion but ignore m10 output.
 err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithAsync(false))
+// or:
+err = sfport.Mouse10(mkpgo.NewM10Option().SetX(10).WithSyncIgnoreOutput(true))
 ```
 
 ### Keyboard example
@@ -196,7 +198,7 @@ mkp-go supports three send modes:
 ### Notes
 
 - For synchronous commands, make sure `SyncOuputEnabled=true` and `go sfport.Read()` is running.
-- `m10` and `kpad` are asynchronous by default. Use `WithAsync(false)` when you need to wait for completion.
+- `m10` and `kpad` are asynchronous by default. Use `WithAsync(false)` or `WithSyncIgnoreOutput(true)` when you need to wait for completion while ignoring output.
 - File deletion/cleaning helpers are intentionally limited to `/eMMC/applog` to reduce accidental damage.
 - Defaults from `NewSFSerialPort()` may need to be adjusted for your actual port, VID/PID, and serial number.
 - Firmware support may vary by device/firmware version.

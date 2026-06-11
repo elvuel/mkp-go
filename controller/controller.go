@@ -58,7 +58,7 @@ func firstM10Option(opts ...*mkpgo.M10Option) *mkpgo.M10Option {
 // controllerM10Async 解析控制器鼠标辅助方法的 async 模式。
 func controllerM10Async(opts ...*mkpgo.M10Option) bool {
 	if opt := firstM10Option(opts...); opt != nil {
-		return opt.Async
+		return opt.IsAsync()
 	}
 	return true
 }

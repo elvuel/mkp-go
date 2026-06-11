@@ -277,7 +277,7 @@ func (sp *SFSerialPort) Mouse10Context(ctx context.Context, opt *M10Option) erro
 	if optStr := strings.TrimSpace(opt.ToString()); optStr != "" {
 		directive += " " + optStr
 	}
-	if opt == nil || opt.Async {
+	if opt.IsAsync() {
 		return sp.SendDirectiveAsyncContext(ctx, directive)
 	}
 	return sp.SendDirectiveIgnoreOutputContext(ctx, directive)
@@ -295,6 +295,7 @@ func (sp *SFSerialPort) MouseReleaseAllContext(ctx context.Context, opts ...*M10
 	btnReleaseOpt := NewM10Option().SetButton(0)
 	if len(opts) > 0 && opts[0] != nil {
 		btnReleaseOpt.Async = opts[0].Async
+		btnReleaseOpt.SyncIgnoreOutput = opts[0].SyncIgnoreOutput
 	}
 	return sp.Mouse10Context(ctx, btnReleaseOpt)
 }
@@ -313,7 +314,7 @@ func (sp *SFSerialPort) KeypadContext(ctx context.Context, opt *KpadOption) erro
 		directive += " " + optStr
 	}
 	var err error
-	if opt == nil || opt.Async {
+	if opt.IsAsync() {
 		err = sp.SendDirectiveAsyncContext(ctx, directive)
 	} else {
 		err = sp.SendDirectiveIgnoreOutputContext(ctx, directive)

@@ -79,8 +79,10 @@ type KpadOption struct {
 	Delay int `json:"delay"`
 	// 输出详情
 	Verbose bool `json:"verbose"`
-	// 是否异步发送，true: SendDirectiveAsync, false: SendDirective
+	// 是否异步发送，true: SendDirectiveAsync, false: SendDirectiveIgnoreOutput
 	Async bool `json:"async"`
+	// 是否同步发送并忽略输出，true: SendDirectiveIgnoreOutput
+	SyncIgnoreOutput bool `json:"sync_ignore_output,omitempty"`
 
 	// commitKpadStateFn runs after successful kpad send.
 	// commitKpadStateFn 在 kpad 发送成功后提交本地状态变更。
@@ -91,24 +93,26 @@ type KpadOption struct {
 // NewKpadOption 创建默认键盘指令参数对象。
 func NewKpadOption() *KpadOption {
 	return &KpadOption{
-		ModKeys: []string{},
-		Keys:    [6]string{},
-		Release: 0,
-		Delay:   0,
-		Verbose: false,
-		Async:   true,
+		ModKeys:          []string{},
+		Keys:             [6]string{},
+		Release:          0,
+		Delay:            0,
+		Verbose:          false,
+		Async:            true,
+		SyncIgnoreOutput: false,
 	}
 }
 
 // kpadOptionJSON is the JSON helper structure used during custom decoding.
 // kpadOptionJSON 是自定义解码时使用的 JSON 辅助结构。
 type kpadOptionJSON struct {
-	ModKeys KpadModKeys `json:"mod_keys"`
-	Keys    [6]string   `json:"keys"`
-	Release int         `json:"release"`
-	Delay   int         `json:"delay"`
-	Verbose bool        `json:"verbose"`
-	Async   *bool       `json:"async"`
+	ModKeys          KpadModKeys `json:"mod_keys"`
+	Keys             [6]string   `json:"keys"`
+	Release          int         `json:"release"`
+	Delay            int         `json:"delay"`
+	Verbose          bool        `json:"verbose"`
+	Async            *bool       `json:"async"`
+	SyncIgnoreOutput *bool       `json:"sync_ignore_output"`
 }
 
 // UnmarshalJSON keeps async default compatible with historical behavior.
@@ -126,7 +130,10 @@ func (opt *KpadOption) UnmarshalJSON(data []byte) error {
 	opt.Delay = raw.Delay
 	opt.Verbose = raw.Verbose
 	if raw.Async != nil {
-		opt.Async = *raw.Async
+		opt.WithAsync(*raw.Async)
+	}
+	if raw.SyncIgnoreOutput != nil {
+		opt.WithSyncIgnoreOutput(*raw.SyncIgnoreOutput)
 	}
 
 	return nil
@@ -248,7 +255,28 @@ func (opt *KpadOption) WithVerbose(verbose bool) *KpadOption {
 // WithAsync 控制 kpad 是否使用异步发送模式。
 func (opt *KpadOption) WithAsync(async bool) *KpadOption {
 	opt.Async = async
+	opt.SyncIgnoreOutput = !async
 	return opt
+}
+
+// WithSyncIgnoreOutput controls synchronous send mode that waits for completion and discards output.
+// WithSyncIgnoreOutput 控制同步发送且忽略输出的模式。
+func (opt *KpadOption) WithSyncIgnoreOutput(syncIgnoreOutput bool) *KpadOption {
+	opt.SyncIgnoreOutput = syncIgnoreOutput
+	opt.Async = !syncIgnoreOutput
+	return opt
+}
+
+// IsAsync reports whether kpad should be sent asynchronously.
+// IsAsync 返回 kpad 是否应按异步模式发送。
+func (opt *KpadOption) IsAsync() bool {
+	return opt == nil || (opt.Async && !opt.SyncIgnoreOutput)
+}
+
+// IsSyncIgnoreOutput reports whether kpad should wait for completion while ignoring output.
+// IsSyncIgnoreOutput 返回 kpad 是否应同步等待完成并忽略输出。
+func (opt *KpadOption) IsSyncIgnoreOutput() bool {
+	return opt != nil && (opt.SyncIgnoreOutput || !opt.Async)
 }
 
 // WithModKeys sets modifier keys directly.
@@ -342,6 +370,7 @@ func (opt *KpadOption) KeyUp(key string) (*KpadOption, *KpadOption) {
 		WithAsync(opt.Async).
 		WithKeys(keys).
 		WithAutoRelease()
+	releaseOpt.SyncIgnoreOutput = opt.SyncIgnoreOutput
 	if hasKpadModKey(keys) {
 		releaseOpt.WithModKeys(releaseModKeys)
 	}
@@ -350,6 +379,7 @@ func (opt *KpadOption) KeyUp(key string) (*KpadOption, *KpadOption) {
 		WithDelay(opt.Delay).
 		WithVerbose(opt.Verbose).
 		WithAsync(opt.Async)
+	remainHoldOpt.SyncIgnoreOutput = opt.SyncIgnoreOutput
 
 	if len(remainKeys) == 0 {
 		remainHoldOpt.WithKey("NONE").WithHold()
