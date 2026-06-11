@@ -49,6 +49,23 @@ func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
 // SendDirectiveContext sends a directive and optionally waits for sync output.
 // SendDirectiveContext 发送指令；支持通过 context 取消等待过程。
 func (sp *SFSerialPort) SendDirectiveContext(ctx context.Context, directive string) (string, error) {
+	return sp.sendDirectiveContext(ctx, directive, false)
+}
+
+// SendDirectiveIgnoreOutput sends a directive synchronously and discards its output.
+// SendDirectiveIgnoreOutput 同步发送指令，但 Read 只等待完成标记并忽略输出内容。
+func (sp *SFSerialPort) SendDirectiveIgnoreOutput(directive string) error {
+	return sp.SendDirectiveIgnoreOutputContext(context.Background(), directive)
+}
+
+// SendDirectiveIgnoreOutputContext sends a directive synchronously and discards its output.
+// SendDirectiveIgnoreOutputContext 同步发送指令并忽略输出，支持通过 context 取消等待过程。
+func (sp *SFSerialPort) SendDirectiveIgnoreOutputContext(ctx context.Context, directive string) error {
+	_, err := sp.sendDirectiveContext(ctx, directive, true)
+	return err
+}
+
+func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive string, ignoreOutput bool) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -56,15 +73,20 @@ func (sp *SFSerialPort) SendDirectiveContext(ctx context.Context, directive stri
 	sp.locker.Lock()
 
 	if sp.VerboseDirective {
-		log.Printf("preparing directive: %s\n", directive)
+		if ignoreOutput {
+			log.Printf("preparing directive with ignored output: %s\n", directive)
+		} else {
+			log.Printf("preparing directive: %s\n", directive)
+		}
 	}
 	if sp.IsSyncOutputEnabled() {
 		sp.clearAsyncMark()
 		sp.EmptySyncDirective()
-		if strings.HasPrefix(directive, "alog") { // as alog output does not start with full cli text.
-			sp.SetSyncDirective("alog")
+		syncDirective := normalizeSFSyncDirective(directive)
+		if ignoreOutput {
+			sp.SetSyncDirectiveIgnoreOutput(syncDirective)
 		} else {
-			sp.SetSyncDirective(directive)
+			sp.SetSyncDirective(syncDirective)
 		}
 		_, err := sp.Write([]byte(directive + "\r\n"))
 		if err != nil {
@@ -81,6 +103,13 @@ func (sp *SFSerialPort) SendDirectiveContext(ctx context.Context, directive stri
 	_, err := sp.Write([]byte(directive + "\r\n"))
 	sp.locker.Unlock()
 	return "", err
+}
+
+func normalizeSFSyncDirective(directive string) string {
+	if strings.HasPrefix(directive, "alog") { // as alog output does not start with full cli text.
+		return "alog"
+	}
+	return directive
 }
 
 // SendDirectiveAsync sends a directive without waiting for response.
@@ -251,8 +280,7 @@ func (sp *SFSerialPort) Mouse10Context(ctx context.Context, opt *M10Option) erro
 	if opt == nil || opt.Async {
 		return sp.SendDirectiveAsyncContext(ctx, directive)
 	}
-	_, err := sp.SendDirectiveContext(ctx, directive)
-	return err
+	return sp.SendDirectiveIgnoreOutputContext(ctx, directive)
 }
 
 // MouseReleaseAll releases all mouse buttons.
@@ -288,7 +316,7 @@ func (sp *SFSerialPort) KeypadContext(ctx context.Context, opt *KpadOption) erro
 	if opt == nil || opt.Async {
 		err = sp.SendDirectiveAsyncContext(ctx, directive)
 	} else {
-		_, err = sp.SendDirectiveContext(ctx, directive)
+		err = sp.SendDirectiveIgnoreOutputContext(ctx, directive)
 	}
 	if err != nil {
 		return err

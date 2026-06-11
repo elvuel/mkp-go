@@ -43,6 +43,7 @@ type SerialPort struct {
 	SyncOuputEnabled  bool `json:"sync_output_enabled"`
 	SyncOutputChan    chan string
 	SyncOutputTimeout time.Duration `json:"sync_output_timeout"`
+	SyncOutputIgnored bool          `json:"-"`
 
 	// Async marker used to drop one unrelated echo frame.
 	// 异步标记用于跳过一帧无关回显数据。
@@ -158,7 +159,7 @@ func (sp *SerialPort) Read() (string, error) {
 			continue
 		}
 
-		syncDirective := sp.GetSyncDirective()
+		syncDirective, syncOutputIgnored := sp.GetSyncDirectiveState()
 		if syncDirective == "" {
 			continue
 		}
@@ -184,32 +185,55 @@ func (sp *SerialPort) Read() (string, error) {
 			continue
 		}
 
-		sp.SyncOutputChan <- string(resultCache[hittedIdx : hittedIdx+outputCompletedIdx])
+		output := ""
+		if !syncOutputIgnored {
+			output = string(resultCache[hittedIdx : hittedIdx+outputCompletedIdx])
+		}
+
+		sp.SyncOutputChan <- output
 		sp.EmptySyncDirective()
 		resultCache = resultCache[:0]
 	}
 }
 
-// SetSyncDirective sets the current sync directive token.
-// SetSyncDirective 设置当前等待匹配的同步指令标记。
+// SetSyncDirective sets the current sync directive token and captures output.
+// SetSyncDirective 设置当前等待匹配的同步指令标记，并捕获输出。
 func (sp *SerialPort) SetSyncDirective(directive string) {
+	sp.setSyncDirective(directive, false)
+}
+
+// SetSyncDirectiveIgnoreOutput sets the current sync directive token and ignores its output.
+// SetSyncDirectiveIgnoreOutput 设置当前等待匹配的同步指令标记，但忽略输出内容。
+func (sp *SerialPort) SetSyncDirectiveIgnoreOutput(directive string) {
+	sp.setSyncDirective(directive, true)
+}
+
+func (sp *SerialPort) setSyncDirective(directive string, ignoreOutput bool) {
 	sp.syncStateMu.Lock()
 	defer sp.syncStateMu.Unlock()
 	sp.SyncDirective = directive
+	sp.SyncOutputIgnored = ignoreOutput
 }
 
 // GetSyncDirective gets current sync directive token.
 // GetSyncDirective 获取当前同步指令标记。
 func (sp *SerialPort) GetSyncDirective() string {
+	syncDirective, _ := sp.GetSyncDirectiveState()
+	return syncDirective
+}
+
+// GetSyncDirectiveState gets current sync directive token and output-ignore flag.
+// GetSyncDirectiveState 获取当前同步指令标记与是否忽略输出。
+func (sp *SerialPort) GetSyncDirectiveState() (string, bool) {
 	sp.syncStateMu.RLock()
 	defer sp.syncStateMu.RUnlock()
-	return sp.SyncDirective
+	return sp.SyncDirective, sp.SyncOutputIgnored
 }
 
 // EmptySyncDirective clears sync directive token.
 // EmptySyncDirective 清空同步指令标记。
 func (sp *SerialPort) EmptySyncDirective() {
-	sp.SetSyncDirective("")
+	sp.setSyncDirective("", false)
 }
 
 // EnableSyncOutput enables sync-output parsing mode.
