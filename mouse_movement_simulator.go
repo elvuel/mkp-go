@@ -473,6 +473,47 @@ func (mc *MouseMovementSimulator) GenerateTrajectory(start, end [2]float64, base
 	return append(path1, path2...)
 }
 
+// MoveOffsets moves through multiple relative M10 offsets with automatically calculated duration.
+//
+// The button name follows CheckMouseButton, for example "left", "right", "middle" or "both".
+// When button is not empty and resolves to a pressed button, the button is released only after all offsets finish.
+//
+// MoveOffsets 按多个相对 M10 offset 自动计算每段耗时并依次移动。
+// button 使用 CheckMouseButton 支持的名称，例如 "left"、"right"、"middle"、"both"。
+// 当 button 非空且能解析为按下状态时，只会在全部 offset 移动完成后释放按钮。
+func (mc *MouseMovementSimulator) MoveOffsets(button string, offsets [][2]int) {
+	mc.MoveOffsetsWithButton(int(CheckMouseButton(button)), offsets)
+}
+
+// MoveOffsetsWithButton moves through multiple relative M10 offsets with automatically calculated duration.
+// MoveOffsetsWithButton 使用按钮位掩码按多个相对 M10 offset 自动计算每段耗时并依次移动。
+func (mc *MouseMovementSimulator) MoveOffsetsWithButton(button int, offsets [][2]int) {
+	m10Opt := NewM10Option()
+	if button != int(ReleaseMouseButton) {
+		defer func() {
+			m10Opt.Reset()
+			m10Opt.SetButton(int(ReleaseMouseButton)).SetX(0).SetY(0)
+			mc.SFPort.Mouse10(m10Opt)
+		}()
+	}
+
+	current := [2]float64{0, 0}
+	for _, offset := range offsets {
+		if offset[0] == 0 && offset[1] == 0 {
+			continue
+		}
+
+		next := [2]float64{
+			current[0] + float64(offset[0]),
+			current[1] + float64(offset[1]),
+		}
+		duration := mc.AutoM10Duration(offset[0], offset[1])
+		trajectory := mc.GenerateTrajectory(current, next, duration)
+		mc.replayTrajectory(m10Opt, button, trajectory)
+		current = next
+	}
+}
+
 // MoveTo sends generated trajectory to device as m10 commands.
 // MoveTo 按生成轨迹发送 m10 指令执行移动。
 func (mc *MouseMovementSimulator) MoveTo(button int, start, end [2]float64, baseTime time.Duration) {
@@ -485,9 +526,13 @@ func (mc *MouseMovementSimulator) MoveTo(button int, start, end [2]float64, base
 	}()
 
 	trajectory := mc.GenerateTrajectory(start, end, baseTime)
+	mc.replayTrajectory(m10Opt, button, trajectory)
+}
+
+func (mc *MouseMovementSimulator) replayTrajectory(m10Opt *M10Option, button int, trajectory []MouseMovementPoint) {
 	for _, p := range trajectory {
 		m10Opt.Reset()
-		if button == 0 {
+		if button == int(ReleaseMouseButton) {
 			m10Opt = m10Opt.WithoutButton()
 		} else {
 			m10Opt = m10Opt.WithButton(button)

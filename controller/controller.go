@@ -376,6 +376,25 @@ func (c *Controller) M10Move(opt *mkpgo.M10Option) {
 // relX and relY are the relative X and Y coordinates to move to.
 // interval is the time to take to move to the new position.
 func (c *Controller) MouseMove(button string, relX, relY int, interval time.Duration, opts ...mkpgo.MouseMovementSimulatorOption) error {
+	callMovement := c.newMouseMovementForCall(opts...)
+	callMovement.MoveTo(int(mkpgo.CheckMouseButton(button)), [2]float64{0, 0}, [2]float64{float64(relX), float64(relY)}, interval)
+	return nil
+}
+
+// MouseMoveOffsets moves through multiple relative M10 offsets with automatically calculated duration.
+//
+// button is the name of the mouse button to press while moving. When button is not empty,
+// the button is released only after all offsets have finished.
+//
+// MouseMoveOffsets 按多个相对 M10 offset 自动计算每段耗时并依次移动。
+// button 非空时，会在全部 offset 移动完成后才释放对应按键。
+func (c *Controller) MouseMoveOffsets(button string, offsets [][2]int, opts ...mkpgo.MouseMovementSimulatorOption) error {
+	callMovement := c.newMouseMovementForCall(opts...)
+	callMovement.MoveOffsets(button, offsets)
+	return nil
+}
+
+func (c *Controller) newMouseMovementForCall(opts ...mkpgo.MouseMovementSimulatorOption) *mkpgo.MouseMovementSimulator {
 	base := c.MouseMovement
 	if base == nil {
 		base = mkpgo.NewMouseMovementSimulator(mkpgo.DefaultMouseMovementSimulatorConfig(), true, true, true)
@@ -393,6 +412,5 @@ func (c *Controller) MouseMove(button string, relX, relY int, interval time.Dura
 	if len(opts) > 0 {
 		callMovement.ApplyOptions(opts...)
 	}
-	callMovement.MoveTo(int(mkpgo.CheckMouseButton(button)), [2]float64{0, 0}, [2]float64{float64(relX), float64(relY)}, interval)
-	return nil
+	return &callMovement
 }
