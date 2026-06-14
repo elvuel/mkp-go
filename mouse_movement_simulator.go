@@ -6,6 +6,21 @@ import (
 	"time"
 )
 
+const (
+	// DefaultMouseMovementUnitsPerSecond is the default target speed used for automatic duration calculation.
+	// DefaultMouseMovementUnitsPerSecond 是自动估算移动时长时使用的默认目标速度，单位为 M10 units/s。
+	DefaultMouseMovementUnitsPerSecond = 2600.0
+	// DefaultMouseMovementPixelsPerUnit is the default screen-pixel to M10-unit scale.
+	// DefaultMouseMovementPixelsPerUnit 是默认的屏幕像素到 M10 单位比例，表示 1 个 M10 unit 对应多少像素。
+	DefaultMouseMovementPixelsPerUnit = 1.0
+	// DefaultMouseMovementMinDuration avoids splitting very small movements too finely.
+	// DefaultMouseMovementMinDuration 避免小位移拆得过碎；自动时长低于该值时会被抬高。
+	DefaultMouseMovementMinDuration = 60 * time.Millisecond
+	// DefaultMouseMovementMaxDuration caps automatic duration for large movements.
+	// DefaultMouseMovementMaxDuration 避免大位移拖得过久；自动时长高于该值时会被压低。
+	DefaultMouseMovementMaxDuration = 360 * time.Millisecond
+)
+
 // MouseMovementPoint represents one sampled movement step.
 // MouseMovementPoint 表示一次采样得到的鼠标移动步点。
 type MouseMovementPoint struct {
@@ -34,6 +49,13 @@ type MouseMovementSimulatorConfig struct {
 	// SpeedMultiplier = 0.5：动作变快一倍（耗时缩短）。
 	// SpeedMultiplier = 2.0：动作变慢一倍（更像是在犹豫或仔细查找）。
 	SpeedMultiplier float64 // 总体速度倍率
+
+	// UnitsPerSecond is the target M10 speed used by AutoM10Duration; <=0 uses the default.
+	// UnitsPerSecond 是自动估算移动时长时使用的目标 M10 单位/秒；<=0 时使用默认值。
+	UnitsPerSecond float64
+	// PixelsPerUnit describes how many screen pixels correspond to one M10 unit; <=0 uses the default.
+	// PixelsPerUnit 表示 1 个 M10 单位对应多少屏幕像素；<=0 时使用默认值。
+	PixelsPerUnit float64
 
 	// 路径形状
 	CtrlOffset       float64 // 冲刺阶段贝塞尔控制点偏移
@@ -68,7 +90,10 @@ type MouseMovementSimulatorConfig struct {
 // DefaultMouseMovementSimulatorConfig 返回默认模拟参数。
 func DefaultMouseMovementSimulatorConfig() *MouseMovementSimulatorConfig {
 	return &MouseMovementSimulatorConfig{
-		SpeedMultiplier:  1.0,
+		SpeedMultiplier: 1.0,
+		UnitsPerSecond:  DefaultMouseMovementUnitsPerSecond,
+		PixelsPerUnit:   DefaultMouseMovementPixelsPerUnit,
+
 		CtrlOffset:       35.0,
 		CorrectionOffset: 8.0,
 
@@ -120,6 +145,22 @@ func WithBesselOffset(ctrlOffset, correctionOffset float64) MouseMovementSimulat
 	return func(mms *MouseMovementSimulator) {
 		mms.Cfg.CtrlOffset = ctrlOffset
 		mms.Cfg.CorrectionOffset = correctionOffset
+	}
+}
+
+// WithUnitsPerSecond sets the target M10 units/s used by automatic duration calculation.
+// WithUnitsPerSecond 设置自动估算移动时长时使用的目标 M10 单位/秒。
+func WithUnitsPerSecond(unitsPerSecond float64) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.Cfg.UnitsPerSecond = unitsPerSecond
+	}
+}
+
+// WithPixelsPerUnit sets the screen-pixel to M10-unit scale.
+// WithPixelsPerUnit 设置屏幕像素到 M10 单位的比例，表示 1 个 M10 unit 对应多少像素。
+func WithPixelsPerUnit(pixelsPerUnit float64) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.Cfg.PixelsPerUnit = pixelsPerUnit
 	}
 }
 
@@ -178,6 +219,7 @@ func WithSFPort(port *SFSerialPort) MouseMovementSimulatorOption {
 		mms.SFPort = port
 	}
 }
+
 // WithConfig replaces simulator config.
 // WithConfig 替换模拟器配置。
 func WithConfig(cfg *MouseMovementSimulatorConfig) MouseMovementSimulatorOption {
@@ -241,6 +283,56 @@ func (mms *MouseMovementSimulator) WithJitter(use bool) {
 // WithoutJitter 关闭抖动行为。
 func (mms *MouseMovementSimulator) WithoutJitter() {
 	mms.UseJitter = false
+}
+
+// PixelsToUnits converts a screen-pixel distance to M10 units using PixelsPerUnit.
+// PixelsToUnits 根据传入的屏幕像素距离和 PixelsPerUnit 返回对应的 M10 unit 数值。
+func (mms *MouseMovementSimulator) PixelsToUnits(distancePixels float64) float64 {
+	return distancePixels / mms.effectivePixelsPerUnit()
+}
+
+// AutoM10Duration estimates a movement duration from M10 unit deltas.
+// AutoM10Duration 根据 M10 单位位移大小和 UnitsPerSecond 自动估算平滑移动总时长。
+func (mms *MouseMovementSimulator) AutoM10Duration(x, y int) time.Duration {
+	return mms.AutoM10DurationForUnits(math.Hypot(float64(x), float64(y)))
+}
+
+// AutoM10DurationForPixels estimates duration from a screen-pixel distance.
+// AutoM10DurationForPixels 根据屏幕像素距离先换算为 M10 units，再自动估算平滑移动总时长。
+func (mms *MouseMovementSimulator) AutoM10DurationForPixels(distancePixels float64) time.Duration {
+	return mms.AutoM10DurationForUnits(math.Abs(mms.PixelsToUnits(distancePixels)))
+}
+
+// AutoM10DurationForUnits estimates duration from an M10-unit distance.
+// AutoM10DurationForUnits 根据 M10 unit 距离和 UnitsPerSecond 自动估算平滑移动总时长。
+func (mms *MouseMovementSimulator) AutoM10DurationForUnits(distanceUnits float64) time.Duration {
+	distanceUnits = math.Abs(distanceUnits)
+	if distanceUnits <= 0 {
+		return 0
+	}
+
+	duration := time.Duration(distanceUnits / mms.effectiveUnitsPerSecond() * float64(time.Second))
+	if duration < DefaultMouseMovementMinDuration {
+		return DefaultMouseMovementMinDuration
+	}
+	if duration > DefaultMouseMovementMaxDuration {
+		return DefaultMouseMovementMaxDuration
+	}
+	return duration
+}
+
+func (mms *MouseMovementSimulator) effectiveUnitsPerSecond() float64 {
+	if mms != nil && mms.Cfg != nil && mms.Cfg.UnitsPerSecond > 0 {
+		return mms.Cfg.UnitsPerSecond
+	}
+	return DefaultMouseMovementUnitsPerSecond
+}
+
+func (mms *MouseMovementSimulator) effectivePixelsPerUnit() float64 {
+	if mms != nil && mms.Cfg != nil && mms.Cfg.PixelsPerUnit > 0 {
+		return mms.Cfg.PixelsPerUnit
+	}
+	return DefaultMouseMovementPixelsPerUnit
 }
 
 // generatePath builds one movement segment path.
