@@ -1,6 +1,6 @@
-﻿# mkp-go
+# mkp-go
 
-English | [中文](./README.md) | [Command Reference](./directives.en.md)
+English | [中文](./README.md) | [Command Reference](./directives.en.md) | [Controller.MouseMove Guide](./doc/controller_mouse_move.en.md)
 
 ---
 
@@ -202,6 +202,7 @@ mkp-go supports three send modes:
 - File deletion/cleaning helpers are intentionally limited to `/eMMC/applog` to reduce accidental damage.
 - Defaults from `NewSFSerialPort()` may need to be adjusted for your actual port, VID/PID, and serial number.
 - Firmware support may vary by device/firmware version.
+
 
 
 

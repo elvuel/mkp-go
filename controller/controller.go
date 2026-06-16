@@ -386,26 +386,43 @@ func (c *Controller) MouseMove(button string, relX, relY int, interval time.Dura
 
 // MouseMoveOffsets moves through multiple relative M10 offsets with automatically calculated duration.
 //
-// offsets accepts either legacy [][2]int or []mkpgo.MouseMoveOffset. When using []mkpgo.MouseMoveOffset,
-// each offset can override the default button, send an optional wheel delta once at that segment start, and sleep after the segment.
+// ctx is checked before each offset step and while waiting for streamed offsets; nil uses context.Background().
+// offsets accepts legacy [][2]int, []mkpgo.MouseMoveOffset, or a <-chan/chan mkpgo.MouseMoveOffset stream.
+// When using MouseMoveOffset, each offset can override the default button, send an optional wheel delta once
+// at that segment start, and sleep after the segment.
 //
 // MouseMoveOffsets 按多个相对 M10 offset 自动计算每段耗时并依次移动。
-// offsets 可传旧版 [][2]int，也可传 []mkpgo.MouseMoveOffset；使用 []mkpgo.MouseMoveOffset 时，
-// 每段 offset 都可以单独覆盖默认 button，在该段开始时发送一次可选 wheel，并在该段结束后停顿。
-func (c *Controller) MouseMoveOffsets(button string, offsets interface{}, opts ...mkpgo.MouseMovementSimulatorOption) error {
+// ctx 会在每个 offset step 开始前以及等待流式 offsets 时检查；nil 表示 context.Background()。
+// offsets 可传旧版 [][2]int、[]mkpgo.MouseMoveOffset，或 <-chan/chan mkpgo.MouseMoveOffset 流；
+// 使用 MouseMoveOffset 时，每段 offset 都可以单独覆盖默认 button，
+// 在该段开始时发送一次可选 wheel，并在该段结束后停顿。
+func (c *Controller) MouseMoveOffsets(ctx context.Context, button string, offsets interface{}, opts ...mkpgo.MouseMovementSimulatorOption) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if offsets == nil {
 		return nil
 	}
 	callMovement := c.newMouseMovementForCall(opts...)
 	switch v := offsets.(type) {
 	case [][2]int:
-		callMovement.MoveOffsets(button, v)
+		return callMovement.MoveOffsetStepsContext(ctx, button, mkpgo.MouseMoveOffsetsFromPairs(v))
 	case []mkpgo.MouseMoveOffset:
-		callMovement.MoveOffsetSteps(button, v)
+		return callMovement.MoveOffsetStepsContext(ctx, button, v)
+	case <-chan mkpgo.MouseMoveOffset:
+		return callMovement.MoveOffsetStream(ctx, button, v)
+	case chan mkpgo.MouseMoveOffset:
+		return callMovement.MoveOffsetStream(ctx, button, v)
 	default:
-		return fmt.Errorf("unsupported MouseMoveOffsets offsets type %T; use [][2]int or []mkpgo.MouseMoveOffset", offsets)
+		return fmt.Errorf("unsupported MouseMoveOffsets offsets type %T; use [][2]int, []mkpgo.MouseMoveOffset, or <-chan mkpgo.MouseMoveOffset", offsets)
 	}
-	return nil
+}
+
+// MouseMoveOffsetsStream consumes dynamically generated offsets until the channel closes or ctx is canceled.
+// MouseMoveOffsetsStream 持续消费动态/流式 offset，直到 channel 关闭或 ctx 取消。
+func (c *Controller) MouseMoveOffsetsStream(ctx context.Context, button string, offsets <-chan mkpgo.MouseMoveOffset, opts ...mkpgo.MouseMovementSimulatorOption) error {
+	callMovement := c.newMouseMovementForCall(opts...)
+	return callMovement.MoveOffsetStream(ctx, button, offsets)
 }
 
 func (c *Controller) newMouseMovementForCall(opts ...mkpgo.MouseMovementSimulatorOption) *mkpgo.MouseMovementSimulator {

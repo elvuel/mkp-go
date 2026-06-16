@@ -1,6 +1,7 @@
 package mkpgo
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"time"
@@ -604,7 +605,13 @@ func (mc *MouseMovementSimulator) MoveOffsetsWithButton(button int, offsets [][2
 // MoveOffsetSteps moves through relative M10 offsets with per-offset optional button/wheel/pause overrides.
 // MoveOffsetSteps 按多段相对 M10 offset 移动，并允许每段单独覆盖 button/wheel/pause。
 func (mc *MouseMovementSimulator) MoveOffsetSteps(button string, offsets []MouseMoveOffset) {
-	mc.MoveOffsetStepsWithButton(int(CheckMouseButton(button)), offsets)
+	mc.MoveOffsetStepsContext(context.Background(), button, offsets)
+}
+
+// MoveOffsetStepsContext moves through relative M10 offsets and checks ctx before each offset.
+// MoveOffsetStepsContext 按多段相对 M10 offset 移动，并在每段开始前检查 ctx。
+func (mc *MouseMovementSimulator) MoveOffsetStepsContext(ctx context.Context, button string, offsets []MouseMoveOffset) error {
+	return mc.MoveOffsetStepsWithButtonContext(ctx, int(CheckMouseButton(button)), offsets)
 }
 
 // MoveOffsetStepsWithButton moves through relative M10 offsets with a default button bitmask.
@@ -616,44 +623,70 @@ func (mc *MouseMovementSimulator) MoveOffsetSteps(button string, offsets []Mouse
 // 每段的 Wheel 会在该段开始时发送一次；如果设置了 mc.Wheel，则作为默认滚轮值使用。
 // 每段的 Pause 会在该段结束后停顿，单位为毫秒。
 func (mc *MouseMovementSimulator) MoveOffsetStepsWithButton(defaultButton int, offsets []MouseMoveOffset) {
+	_ = mc.MoveOffsetStepsWithButtonContext(context.Background(), defaultButton, offsets)
+}
+
+// MoveOffsetStepsWithButtonContext moves through relative M10 offsets with a default button bitmask and checks ctx before each offset.
+// MoveOffsetStepsWithButtonContext 使用默认按钮位掩码按多段相对 M10 offset 移动，并在每段开始前检查 ctx。
+func (mc *MouseMovementSimulator) MoveOffsetStepsWithButtonContext(ctx context.Context, defaultButton int, offsets []MouseMoveOffset) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	m10Opt := NewM10Option()
 	if mc.shouldReleaseAfterOffsets(defaultButton, offsets) {
-		defer func() {
-			m10Opt.Reset()
-			m10Opt.SetButton(int(ReleaseMouseButton)).SetX(0).SetY(0)
-			mc.SFPort.Mouse10(m10Opt)
-		}()
+		defer mc.releaseMouseAfterOffsets(m10Opt)()
 	}
 
 	current := [2]float64{0, 0}
 	defaultButtonField := legacyM10ButtonField(defaultButton)
 	for _, offset := range offsets {
-		buttonField := defaultButtonField
-		if offset.Button != nil {
-			buttonField = cloneIntPtr(offset.Button)
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		wheel := offset.Wheel
-		if wheel == nil {
-			wheel = mc.Wheel
-		}
+		mc.moveOffsetStep(m10Opt, &current, defaultButtonField, offset)
+	}
+	return nil
+}
 
-		if offset.X == 0 && offset.Y == 0 {
-			if buttonField != nil || wheel != nil {
-				mc.sendM10Point(m10Opt, buttonField, 0, 0, wheel)
+// MoveOffsetStream consumes relative M10 offsets from a channel until it is closed or ctx is canceled.
+// MoveOffsetStream 从 channel 持续读取相对 M10 offset，直到 channel 关闭或 ctx 取消。
+func (mc *MouseMovementSimulator) MoveOffsetStream(ctx context.Context, button string, offsets <-chan MouseMoveOffset) error {
+	return mc.MoveOffsetStreamWithButton(ctx, int(CheckMouseButton(button)), offsets)
+}
+
+// MoveOffsetStreamWithButton consumes relative M10 offsets from a channel with a default button bitmask.
+// MoveOffsetStreamWithButton 使用默认按钮位掩码从 channel 持续读取相对 M10 offset。
+func (mc *MouseMovementSimulator) MoveOffsetStreamWithButton(ctx context.Context, defaultButton int, offsets <-chan MouseMoveOffset) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if offsets == nil {
+		return nil
+	}
+
+	m10Opt := NewM10Option()
+	needRelease := defaultButton != int(ReleaseMouseButton)
+	defer func() {
+		if needRelease {
+			mc.releaseMouseAfterOffsets(m10Opt)()
+		}
+	}()
+
+	current := [2]float64{0, 0}
+	defaultButtonField := legacyM10ButtonField(defaultButton)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case offset, ok := <-offsets:
+			if !ok {
+				return nil
 			}
-			sleepMouseMoveOffsetPause(offset.Pause)
-			continue
+			if offset.Button != nil && *offset.Button != int(ReleaseMouseButton) {
+				needRelease = true
+			}
+			mc.moveOffsetStep(m10Opt, &current, defaultButtonField, offset)
 		}
-
-		next := [2]float64{
-			current[0] + float64(offset.X),
-			current[1] + float64(offset.Y),
-		}
-		duration := mc.AutoM10Duration(offset.X, offset.Y)
-		trajectory := mc.GenerateTrajectory(current, next, duration)
-		mc.replayTrajectoryWithButtonAndWheel(m10Opt, buttonField, trajectory, wheel)
-		current = next
-		sleepMouseMoveOffsetPause(offset.Pause)
 	}
 }
 
@@ -692,6 +725,35 @@ func (mc *MouseMovementSimulator) replayTrajectoryWithButtonAndWheel(m10Opt *M10
 	}
 }
 
+func (mc *MouseMovementSimulator) moveOffsetStep(m10Opt *M10Option, current *[2]float64, defaultButtonField *int, offset MouseMoveOffset) {
+	buttonField := defaultButtonField
+	if offset.Button != nil {
+		buttonField = cloneIntPtr(offset.Button)
+	}
+	wheel := offset.Wheel
+	if wheel == nil {
+		wheel = mc.Wheel
+	}
+
+	if offset.X == 0 && offset.Y == 0 {
+		if buttonField != nil || wheel != nil {
+			mc.sendM10Point(m10Opt, buttonField, 0, 0, wheel)
+		}
+		sleepMouseMoveOffsetPause(offset.Pause)
+		return
+	}
+
+	next := [2]float64{
+		current[0] + float64(offset.X),
+		current[1] + float64(offset.Y),
+	}
+	duration := mc.AutoM10Duration(offset.X, offset.Y)
+	trajectory := mc.GenerateTrajectory(*current, next, duration)
+	mc.replayTrajectoryWithButtonAndWheel(m10Opt, buttonField, trajectory, wheel)
+	*current = next
+	sleepMouseMoveOffsetPause(offset.Pause)
+}
+
 func (mc *MouseMovementSimulator) sendM10Point(m10Opt *M10Option, button *int, x, y int, wheel *int) {
 	mc.prepareM10Point(m10Opt, button, x, y, wheel, true)
 	mc.SFPort.Mouse10(m10Opt)
@@ -720,6 +782,14 @@ func (mc *MouseMovementSimulator) shouldReleaseAfterOffsets(defaultButton int, o
 		}
 	}
 	return false
+}
+
+func (mc *MouseMovementSimulator) releaseMouseAfterOffsets(m10Opt *M10Option) func() {
+	return func() {
+		m10Opt.Reset()
+		m10Opt.SetButton(int(ReleaseMouseButton)).SetX(0).SetY(0)
+		mc.SFPort.Mouse10(m10Opt)
+	}
 }
 
 func legacyM10ButtonField(button int) *int {

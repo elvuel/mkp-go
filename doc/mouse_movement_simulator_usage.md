@@ -10,7 +10,7 @@
 - **过冲阶段（Overshoot，可选）**：先略微超过目标点。
 - **修正阶段（Correction）**：从过冲点回拉到真实目标。
 - **抖动（Jitter，可选）**：给轨迹加入少量随机扰动。
-- **停顿（Pause，可选）**：冲刺后到修正前插入短暂停顿。
+- **停顿（Pause，可选）**：`UsePause` 可在冲刺后到修正前插入短暂停顿；`MouseMoveOffset.Pause` 可在多段 offset 的某个 step 后额外停顿。
 
 默认配置在“自然度、可控性、易用性”之间做了一个比较均衡的折中。
 
@@ -54,6 +54,97 @@ err := ctrl.MouseMove(
     mkpgo.WithJitter(true),
 )
 ```
+
+### 2.3 移动开始时附带一次滚轮
+
+`WithWheel(wheel)` 可用于 `Controller.MouseMove` / `MouseMovementSimulator.MoveTo`，会在本次轨迹回放的第一条 `m10` 指令中附带一次 `--w`：
+
+```go
+err := ctrl.MouseMove(
+    "",
+    60, 30,
+    180*time.Millisecond,
+    mkpgo.WithWheel(1),
+)
+```
+
+注意：`wheel` **只发送一次**，不会在每个轨迹采样点重复发送，因此不会因为轨迹被拆成多段而放大滚轮次数。
+
+如果某个基础模拟器实例上设置过默认 wheel，可以用 `WithoutWheel()` 清除本次调用的 wheel：
+
+```go
+err := ctrl.MouseMove("", 60, 30, 180*time.Millisecond, mkpgo.WithoutWheel())
+```
+
+### 2.4 多段 offset：每段独立 button / wheel / pause
+
+如果一次动作需要拆成多个逻辑 step，并且每个 step 都可能有自己的按钮、滚轮或段后停顿，可以使用 `MouseMoveOffset` 和 `Controller.MouseMoveOffsets`：
+
+```go
+offsets := []mkpgo.MouseMoveOffset{
+    mkpgo.NewMouseMoveOffset(50, 0).WithButton("left").WithPause(80),
+    mkpgo.NewMouseMoveOffset(0, 20).WithWheel(1).WithPause(50),
+    mkpgo.NewMouseMoveOffset(-10, 0).WithoutButton(),
+}
+
+err := ctrl.MouseMoveOffsets(context.Background(), "", offsets)
+```
+
+`MouseMoveOffset` 字段含义：
+
+| 字段 | 说明 |
+|---|---|
+| `X` / `Y` | 当前 step 的相对 M10 位移。 |
+| `Button *int` | 可选按钮覆盖；`nil` 使用默认按钮，`0` 表示显式释放按钮。 |
+| `Wheel *int` | 可选滚轮值；在当前 step 开始时发送一次。 |
+| `Pause *int` | 可选段后停顿，单位为毫秒；`nil` 或 `<=0` 表示不额外停顿。 |
+
+辅助方法：
+
+```go
+mkpgo.NewMouseMoveOffset(10, 0).
+    WithButton("left").
+    WithWheel(1).
+    WithPause(100)
+```
+
+也支持旧版 `[][2]int`：
+
+```go
+err := ctrl.MouseMoveOffsets(context.Background(), "left", [][2]int{
+    {50, 0},
+    {0, 20},
+})
+```
+
+### 2.5 动态/流式 offset
+
+`MouseMoveOffsets` 支持传入 `<-chan mkpgo.MouseMoveOffset` / `chan mkpgo.MouseMoveOffset`，适合 offset 由另一个 goroutine 实时产生的场景：
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+offsetCh := make(chan mkpgo.MouseMoveOffset)
+
+go func() {
+    defer close(offsetCh)
+
+    for i := 0; i < 10; i++ {
+        offsetCh <- mkpgo.NewMouseMoveOffset(5, 0).WithPause(10)
+    }
+}()
+
+err := ctrl.MouseMoveOffsets(ctx, "", offsetCh)
+```
+
+也可以显式调用类型更明确的流式 API：
+
+```go
+err := ctrl.MouseMoveOffsetsStream(ctx, "", offsetCh)
+```
+
+`ctx` 会在每个 offset step 开始前、以及等待 channel 产生下一段 offset 时检查。如果某个 step 已经开始执行轨迹，或正在执行该 step 的 `Pause`，当前实现会等该 step 完成后再返回取消错误。
 
 ---
 
@@ -191,6 +282,10 @@ err := ctrl.MouseMove(
   - `10 ~ 25ms`：节奏更紧
   - `20 ~ 60ms`：平衡推荐
   - `40 ~ 90ms`：更犹豫、更明显
+
+注意这里的 Pause 是轨迹内部“冲刺阶段 -> 修正阶段”之间的停顿，只在 `UsePause = true` 且启用过冲/修正阶段时体现。
+
+如果你使用的是 `MouseMoveOffset.WithPause(ms)` / `MouseMoveOffset.Pause`，它表示**当前 offset step 完成后的额外停顿**，单位也是毫秒，两者不是同一个配置项。
 
 ---
 
@@ -361,7 +456,12 @@ cfg.CorrectionTimeRatio = 0.22
 
 ### Q7：为什么我设置了 Pause 反而报错或行为异常？
 
-当前实现里：
+先区分两类 Pause：
+
+1. `MouseMovementSimulatorConfig.PauseMinMs / PauseMaxMs`：轨迹内部冲刺阶段与修正阶段之间的随机停顿。
+2. `MouseMoveOffset.Pause` / `WithPause(ms)`：多段 offset 中某个 step 执行完成后的固定停顿。
+
+对于第 1 类配置，当前实现里：
 
 ```go
 pauseMs := mc.Cfg.PauseMinMs + rand.Intn(pRange)
@@ -375,7 +475,13 @@ pauseMs := mc.Cfg.PauseMinMs + rand.Intn(pRange)
 - `20 / 21`：可以
 - `20 / 20`：当前实现下不建议
 
-如果你想固定停顿时间，当前更稳妥的做法是给它留一个很小区间，比如 `20 ~ 21ms`。
+如果你想固定轨迹内部停顿时间，当前更稳妥的做法是给它留一个很小区间，比如 `20 ~ 21ms`。
+
+对于第 2 类 `MouseMoveOffset.Pause`，它是 `*int`，单位为毫秒；`nil` 或 `<= 0` 表示不额外停顿：
+
+```go
+mkpgo.NewMouseMoveOffset(10, 0).WithPause(100)
+```
 
 ### Q8：为什么我的短距离移动看起来很奇怪？
 
@@ -422,3 +528,4 @@ pauseMs := mc.Cfg.PauseMinMs + rand.Intn(pRange)
 建议每次只改 1~2 个参数，并且每次变化幅度不要太大。
 
 这样最容易找到稳定、可复用的参数区间。
+

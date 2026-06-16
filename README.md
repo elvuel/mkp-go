@@ -1,6 +1,6 @@
-﻿# mkp-go
+# mkp-go
 
-[English](./README.en.md) | 中文 | [指令文档](./directives.md)
+[English](./README.en.md) | 中文 | [指令文档](./directives.md) | [Controller.MouseMove 使用说明](./doc/controller_mouse_move.md)
 
 ---
 
@@ -202,5 +202,6 @@ mkp-go 支持三类发送模式：
 - 具体固件是否支持某个指令，以设备固件版本为准。
 
 ---
+
 
 
