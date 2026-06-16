@@ -31,6 +31,81 @@ type MouseMovementPoint struct {
 	Duration time.Duration
 }
 
+// MouseMoveOffset represents one relative movement segment with optional wheel, button, and post-step pause overrides.
+// MouseMoveOffset 表示一段相对移动，并可为该段单独覆盖滚轮、鼠标按键与段后停顿。
+type MouseMoveOffset struct {
+	X      int  `json:"x"`
+	Y      int  `json:"y"`
+	Wheel  *int `json:"wheel,omitempty"`
+	Button *int `json:"button,omitempty"`
+	// Pause is an optional sleep duration after this movement segment, in milliseconds.
+	// Pause 是当前移动段结束后的可选停顿时长，单位为毫秒。
+	Pause *int `json:"pause,omitempty"`
+}
+
+// NewMouseMoveOffset creates a relative movement segment.
+// NewMouseMoveOffset 创建一段相对移动。
+func NewMouseMoveOffset(x, y int) MouseMoveOffset {
+	return MouseMoveOffset{X: x, Y: y}
+}
+
+// MouseMoveOffsetsFromPairs converts legacy [][2]int offsets into MouseMoveOffset values.
+// MouseMoveOffsetsFromPairs 将旧版 [][2]int offsets 转换为 MouseMoveOffset。
+func MouseMoveOffsetsFromPairs(offsets [][2]int) []MouseMoveOffset {
+	items := make([]MouseMoveOffset, 0, len(offsets))
+	for _, offset := range offsets {
+		items = append(items, NewMouseMoveOffset(offset[0], offset[1]))
+	}
+	return items
+}
+
+// WithWheel sets this movement segment's optional wheel delta.
+// WithWheel 设置当前移动段的可选滚轮位移值。
+func (o MouseMoveOffset) WithWheel(wheel int) MouseMoveOffset {
+	o.Wheel = &wheel
+	return o
+}
+
+// WithoutWheel clears this movement segment's optional wheel delta.
+// WithoutWheel 清除当前移动段的可选滚轮位移值。
+func (o MouseMoveOffset) WithoutWheel() MouseMoveOffset {
+	o.Wheel = nil
+	return o
+}
+
+// WithPause sets an optional sleep duration after this movement segment, in milliseconds.
+// WithPause 设置当前移动段结束后的可选停顿时长，单位为毫秒。
+func (o MouseMoveOffset) WithPause(pauseMs int) MouseMoveOffset {
+	o.Pause = &pauseMs
+	return o
+}
+
+// WithoutPause clears this movement segment's optional pause.
+// WithoutPause 清除当前移动段结束后的可选停顿。
+func (o MouseMoveOffset) WithoutPause() MouseMoveOffset {
+	o.Pause = nil
+	return o
+}
+
+// WithButton sets this movement segment's button override by button name.
+// WithButton 按按钮名称设置当前移动段的鼠标按键覆盖。
+func (o MouseMoveOffset) WithButton(button string) MouseMoveOffset {
+	return o.WithButtonMask(int(CheckMouseButton(button)))
+}
+
+// WithButtonMask sets this movement segment's button override by M10 bitmask.
+// WithButtonMask 按 M10 按键位掩码设置当前移动段的鼠标按键覆盖。
+func (o MouseMoveOffset) WithButtonMask(button int) MouseMoveOffset {
+	o.Button = &button
+	return o
+}
+
+// WithoutButton explicitly releases mouse buttons for this movement segment.
+// WithoutButton 显式让当前移动段释放鼠标按键。
+func (o MouseMoveOffset) WithoutButton() MouseMoveOffset {
+	return o.WithButtonMask(int(ReleaseMouseButton))
+}
+
 /*
 对抗机器学习检测：建议大幅增加 JitterMag 并减小 SampleInterval。
 
@@ -121,6 +196,10 @@ type MouseMovementSimulator struct {
 	UsePause     bool
 	UseJitter    bool
 
+	// Wheel is an optional wheel delta sent once at the start of MoveTo replay.
+	// Wheel 是可选滚轮位移值；非 nil 时会在 MoveTo 回放的第一条 m10 指令中发送一次。
+	Wheel *int
+
 	SFPort *SFSerialPort
 }
 
@@ -161,6 +240,23 @@ func WithUnitsPerSecond(unitsPerSecond float64) MouseMovementSimulatorOption {
 func WithPixelsPerUnit(pixelsPerUnit float64) MouseMovementSimulatorOption {
 	return func(mms *MouseMovementSimulator) {
 		mms.Cfg.PixelsPerUnit = pixelsPerUnit
+	}
+}
+
+// WithWheel sets an optional wheel delta for MoveTo/Controller.MouseMove.
+// The wheel delta is sent once on the first replayed m10 directive so it is not multiplied by trajectory samples.
+// WithWheel 为 MoveTo/Controller.MouseMove 设置可选滚轮位移值；该值只会在第一条回放 m10 指令中发送一次，避免被轨迹采样点重复放大。
+func WithWheel(wheel int) MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.SetWheel(wheel)
+	}
+}
+
+// WithoutWheel clears the optional wheel delta for MoveTo/Controller.MouseMove.
+// WithoutWheel 清除 MoveTo/Controller.MouseMove 的可选滚轮位移值。
+func WithoutWheel() MouseMovementSimulatorOption {
+	return func(mms *MouseMovementSimulator) {
+		mms.WithoutWheel()
 	}
 }
 
@@ -283,6 +379,18 @@ func (mms *MouseMovementSimulator) WithJitter(use bool) {
 // WithoutJitter 关闭抖动行为。
 func (mms *MouseMovementSimulator) WithoutJitter() {
 	mms.UseJitter = false
+}
+
+// SetWheel sets an optional wheel delta for MoveTo replay.
+// SetWheel 设置 MoveTo 回放时附带的一次性滚轮位移值。
+func (mms *MouseMovementSimulator) SetWheel(wheel int) {
+	mms.Wheel = &wheel
+}
+
+// WithoutWheel clears the optional wheel delta for MoveTo replay.
+// WithoutWheel 清除 MoveTo 回放时附带的一次性滚轮位移值。
+func (mms *MouseMovementSimulator) WithoutWheel() {
+	mms.Wheel = nil
 }
 
 // PixelsToUnits converts a screen-pixel distance to M10 units using PixelsPerUnit.
@@ -476,11 +584,13 @@ func (mc *MouseMovementSimulator) GenerateTrajectory(start, end [2]float64, base
 // MoveOffsets moves through multiple relative M10 offsets with automatically calculated duration.
 //
 // The button name follows CheckMouseButton, for example "left", "right", "middle" or "both".
-// When button is not empty and resolves to a pressed button, the button is released only after all offsets finish.
+// When button is not empty and resolves to a pressed button, it is used as the default button for every offset.
+// Use MoveOffsetSteps for per-offset button/wheel overrides.
 //
 // MoveOffsets 按多个相对 M10 offset 自动计算每段耗时并依次移动。
 // button 使用 CheckMouseButton 支持的名称，例如 "left"、"right"、"middle"、"both"。
-// 当 button 非空且能解析为按下状态时，只会在全部 offset 移动完成后释放按钮。
+// 当 button 非空且能解析为按下状态时，会作为每段 offset 的默认按键。
+// 如需为每段单独指定 button/wheel，请使用 MoveOffsetSteps。
 func (mc *MouseMovementSimulator) MoveOffsets(button string, offsets [][2]int) {
 	mc.MoveOffsetsWithButton(int(CheckMouseButton(button)), offsets)
 }
@@ -488,8 +598,26 @@ func (mc *MouseMovementSimulator) MoveOffsets(button string, offsets [][2]int) {
 // MoveOffsetsWithButton moves through multiple relative M10 offsets with automatically calculated duration.
 // MoveOffsetsWithButton 使用按钮位掩码按多个相对 M10 offset 自动计算每段耗时并依次移动。
 func (mc *MouseMovementSimulator) MoveOffsetsWithButton(button int, offsets [][2]int) {
+	mc.MoveOffsetStepsWithButton(button, MouseMoveOffsetsFromPairs(offsets))
+}
+
+// MoveOffsetSteps moves through relative M10 offsets with per-offset optional button/wheel/pause overrides.
+// MoveOffsetSteps 按多段相对 M10 offset 移动，并允许每段单独覆盖 button/wheel/pause。
+func (mc *MouseMovementSimulator) MoveOffsetSteps(button string, offsets []MouseMoveOffset) {
+	mc.MoveOffsetStepsWithButton(int(CheckMouseButton(button)), offsets)
+}
+
+// MoveOffsetStepsWithButton moves through relative M10 offsets with a default button bitmask.
+// Per-offset Button overrides the default; Button==0 explicitly releases buttons for that segment.
+// Per-offset Wheel is sent once at the beginning of that segment; mc.Wheel is used as a default wheel when set.
+// Per-offset Pause sleeps after that segment, in milliseconds.
+// MoveOffsetStepsWithButton 使用默认按钮位掩码按多段相对 M10 offset 移动。
+// 每段的 Button 会覆盖默认按钮；Button==0 表示该段显式释放按钮。
+// 每段的 Wheel 会在该段开始时发送一次；如果设置了 mc.Wheel，则作为默认滚轮值使用。
+// 每段的 Pause 会在该段结束后停顿，单位为毫秒。
+func (mc *MouseMovementSimulator) MoveOffsetStepsWithButton(defaultButton int, offsets []MouseMoveOffset) {
 	m10Opt := NewM10Option()
-	if button != int(ReleaseMouseButton) {
+	if mc.shouldReleaseAfterOffsets(defaultButton, offsets) {
 		defer func() {
 			m10Opt.Reset()
 			m10Opt.SetButton(int(ReleaseMouseButton)).SetX(0).SetY(0)
@@ -498,19 +626,34 @@ func (mc *MouseMovementSimulator) MoveOffsetsWithButton(button int, offsets [][2
 	}
 
 	current := [2]float64{0, 0}
+	defaultButtonField := legacyM10ButtonField(defaultButton)
 	for _, offset := range offsets {
-		if offset[0] == 0 && offset[1] == 0 {
+		buttonField := defaultButtonField
+		if offset.Button != nil {
+			buttonField = cloneIntPtr(offset.Button)
+		}
+		wheel := offset.Wheel
+		if wheel == nil {
+			wheel = mc.Wheel
+		}
+
+		if offset.X == 0 && offset.Y == 0 {
+			if buttonField != nil || wheel != nil {
+				mc.sendM10Point(m10Opt, buttonField, 0, 0, wheel)
+			}
+			sleepMouseMoveOffsetPause(offset.Pause)
 			continue
 		}
 
 		next := [2]float64{
-			current[0] + float64(offset[0]),
-			current[1] + float64(offset[1]),
+			current[0] + float64(offset.X),
+			current[1] + float64(offset.Y),
 		}
-		duration := mc.AutoM10Duration(offset[0], offset[1])
+		duration := mc.AutoM10Duration(offset.X, offset.Y)
 		trajectory := mc.GenerateTrajectory(current, next, duration)
-		mc.replayTrajectory(m10Opt, button, trajectory)
+		mc.replayTrajectoryWithButtonAndWheel(m10Opt, buttonField, trajectory, wheel)
 		current = next
+		sleepMouseMoveOffsetPause(offset.Pause)
 	}
 }
 
@@ -526,19 +669,78 @@ func (mc *MouseMovementSimulator) MoveTo(button int, start, end [2]float64, base
 	}()
 
 	trajectory := mc.GenerateTrajectory(start, end, baseTime)
-	mc.replayTrajectory(m10Opt, button, trajectory)
+	mc.replayTrajectoryWithWheel(m10Opt, button, trajectory, mc.Wheel)
 }
 
 func (mc *MouseMovementSimulator) replayTrajectory(m10Opt *M10Option, button int, trajectory []MouseMovementPoint) {
+	mc.replayTrajectoryWithWheel(m10Opt, button, trajectory, nil)
+}
+
+func (mc *MouseMovementSimulator) replayTrajectoryWithWheel(m10Opt *M10Option, button int, trajectory []MouseMovementPoint, wheel *int) {
+	mc.replayTrajectoryWithButtonAndWheel(m10Opt, legacyM10ButtonField(button), trajectory, wheel)
+}
+
+func (mc *MouseMovementSimulator) replayTrajectoryWithButtonAndWheel(m10Opt *M10Option, button *int, trajectory []MouseMovementPoint, wheel *int) {
+	wheelSent := false
 	for _, p := range trajectory {
-		m10Opt.Reset()
-		if button == int(ReleaseMouseButton) {
-			m10Opt = m10Opt.WithoutButton()
-		} else {
-			m10Opt = m10Opt.WithButton(button)
+		mc.prepareM10Point(m10Opt, button, int(p.RelX), int(p.RelY), wheel, !wheelSent)
+		if wheel != nil && !wheelSent {
+			wheelSent = true
 		}
-		m10Opt.SetX(int(p.RelX)).SetY(int(p.RelY))
 		mc.SFPort.Mouse10(m10Opt)
 		time.Sleep(p.Duration)
 	}
+}
+
+func (mc *MouseMovementSimulator) sendM10Point(m10Opt *M10Option, button *int, x, y int, wheel *int) {
+	mc.prepareM10Point(m10Opt, button, x, y, wheel, true)
+	mc.SFPort.Mouse10(m10Opt)
+}
+
+func (mc *MouseMovementSimulator) prepareM10Point(m10Opt *M10Option, button *int, x, y int, wheel *int, includeWheel bool) {
+	m10Opt.Reset()
+	if button == nil {
+		m10Opt = m10Opt.WithoutButton()
+	} else {
+		m10Opt = m10Opt.WithButton(*button)
+	}
+	m10Opt.SetX(x).SetY(y)
+	if wheel != nil && includeWheel {
+		m10Opt.SetWheel(*wheel)
+	}
+}
+
+func (mc *MouseMovementSimulator) shouldReleaseAfterOffsets(defaultButton int, offsets []MouseMoveOffset) bool {
+	if defaultButton != int(ReleaseMouseButton) {
+		return true
+	}
+	for _, offset := range offsets {
+		if offset.Button != nil && *offset.Button != int(ReleaseMouseButton) {
+			return true
+		}
+	}
+	return false
+}
+
+func legacyM10ButtonField(button int) *int {
+	if button == int(ReleaseMouseButton) {
+		return nil
+	}
+	v := button
+	return &v
+}
+
+func cloneIntPtr(v *int) *int {
+	if v == nil {
+		return nil
+	}
+	clone := *v
+	return &clone
+}
+
+func sleepMouseMoveOffsetPause(pauseMs *int) {
+	if pauseMs == nil || *pauseMs <= 0 {
+		return
+	}
+	time.Sleep(time.Duration(*pauseMs) * time.Millisecond)
 }

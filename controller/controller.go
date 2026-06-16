@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -371,10 +372,12 @@ func (c *Controller) M10Move(opt *mkpgo.M10Option) {
 	helper.M10(context.Background(), c.sfport, opt)
 }
 
-// MouseMove  Move the mouse to the specified position relative to the current position.
+// MouseMove moves the mouse to the specified position relative to the current position.
 // button is the name of the mouse button to press while moving.
 // relX and relY are the relative X and Y coordinates to move to.
 // interval is the time to take to move to the new position.
+// Pass mkpgo.WithWheel(wheel) to include an optional wheel delta once at the start of the move.
+// 可通过 mkpgo.WithWheel(wheel) 指定可选滚轮位移值，该值会在移动开始时发送一次。
 func (c *Controller) MouseMove(button string, relX, relY int, interval time.Duration, opts ...mkpgo.MouseMovementSimulatorOption) error {
 	callMovement := c.newMouseMovementForCall(opts...)
 	callMovement.MoveTo(int(mkpgo.CheckMouseButton(button)), [2]float64{0, 0}, [2]float64{float64(relX), float64(relY)}, interval)
@@ -383,14 +386,25 @@ func (c *Controller) MouseMove(button string, relX, relY int, interval time.Dura
 
 // MouseMoveOffsets moves through multiple relative M10 offsets with automatically calculated duration.
 //
-// button is the name of the mouse button to press while moving. When button is not empty,
-// the button is released only after all offsets have finished.
+// offsets accepts either legacy [][2]int or []mkpgo.MouseMoveOffset. When using []mkpgo.MouseMoveOffset,
+// each offset can override the default button, send an optional wheel delta once at that segment start, and sleep after the segment.
 //
 // MouseMoveOffsets 按多个相对 M10 offset 自动计算每段耗时并依次移动。
-// button 非空时，会在全部 offset 移动完成后才释放对应按键。
-func (c *Controller) MouseMoveOffsets(button string, offsets [][2]int, opts ...mkpgo.MouseMovementSimulatorOption) error {
+// offsets 可传旧版 [][2]int，也可传 []mkpgo.MouseMoveOffset；使用 []mkpgo.MouseMoveOffset 时，
+// 每段 offset 都可以单独覆盖默认 button，在该段开始时发送一次可选 wheel，并在该段结束后停顿。
+func (c *Controller) MouseMoveOffsets(button string, offsets interface{}, opts ...mkpgo.MouseMovementSimulatorOption) error {
+	if offsets == nil {
+		return nil
+	}
 	callMovement := c.newMouseMovementForCall(opts...)
-	callMovement.MoveOffsets(button, offsets)
+	switch v := offsets.(type) {
+	case [][2]int:
+		callMovement.MoveOffsets(button, v)
+	case []mkpgo.MouseMoveOffset:
+		callMovement.MoveOffsetSteps(button, v)
+	default:
+		return fmt.Errorf("unsupported MouseMoveOffsets offsets type %T; use [][2]int or []mkpgo.MouseMoveOffset", offsets)
+	}
 	return nil
 }
 
@@ -406,6 +420,10 @@ func (c *Controller) newMouseMovementForCall(opts ...mkpgo.MouseMovementSimulato
 		callMovement.Cfg = &cfg
 	} else {
 		callMovement.Cfg = mkpgo.DefaultMouseMovementSimulatorConfig()
+	}
+	if base.Wheel != nil {
+		wheel := *base.Wheel
+		callMovement.Wheel = &wheel
 	}
 	callMovement.SetSFPort(c.sfport)
 
