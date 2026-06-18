@@ -59,6 +59,7 @@ fmt.Println(sn, err)
 | `clean_dir` | `clean_dir <path>` | Clean a directory | `helper.CleanDir` | Empty on success; error on failure |
 | `delete_file` | `delete_file <path>` | Delete a file | `helper.DeleteFile` | Empty on success; error on failure |
 | `join` | `join [ssid password]` | Connect Wi-Fi; without args, use the most recently saved config | `helper.Join` / `Controller.Join` | Text parser `RawDirective_join`; success contains `connect: Connected` |
+| `wifi_auto` | `wifi_auto [0|1]` | Inspect or set Wi-Fi auto-connect state | `helper.WifiAuto` / `Controller.WifiAuto` | Text parser `RawDirective_wifi_auto`; query returns `on` / `off` |
 | `alive` | `alive` | Heartbeat / liveness check | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | Get log duration | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | Get firmware/application version | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -393,6 +394,74 @@ I (736872) connect: Connected
 cli>
 ```
 
+### `wifi_auto`: inspect/set Wi-Fi auto-connect
+
+**CLI:**
+
+```text
+wifi_auto [0|1]
+```
+
+Call forms:
+
+```text
+wifi_auto
+wifi_auto 1
+wifi_auto 0
+```
+
+- Without arguments, query the current auto-connect state.
+- `state == "1"` enables auto-connect on startup.
+- `state == "0"` disables auto-connect.
+
+**Go API:**
+
+```go
+// Query current state; returns "on" or "off".
+out, err := helper.WifiAuto(sfport, nil)
+
+// Enable auto-connect.
+out, err = helper.WifiAuto(sfport, &mkpgo.WifiAutoOption{State: "1"})
+
+// Disable auto-connect.
+out, err = helper.WifiAuto(sfport, &mkpgo.WifiAutoOption{State: "0"})
+```
+
+`Controller` proxy:
+
+```go
+out, err := ctrl.WifiAuto(nil)
+out, err = ctrl.WifiAuto(&mkpgo.WifiAutoOption{State: "1"})
+```
+
+**Parser:** `RawDirective_wifi_auto`
+
+- Output type: text, not JSON.
+- EOF marker: `cli>`.
+- Query success rule: output contains `auto: on` or `auto: off`; parser returns `"on"` / `"off"`.
+- Set success rule: `wifi_auto 1` / `wifi_auto 0` reaches `cli>` with empty output and returns an empty string with nil error.
+- Failure rule: output containing `Command returned non-zero error code` / `error code` returns `ErrRawDirecitveExecutionFailed`.
+
+Query output example:
+
+```text
+wifi_auto
+auto: on
+
+cli>
+```
+
+Set output examples:
+
+```text
+wifi_auto 1
+cli>
+```
+
+```text
+wifi_auto 0
+cli>
+```
 ### `alive`: heartbeat check
 
 **CLI:**
@@ -688,6 +757,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `clean_dir` | `RawDirective_clean_dir` | No | `cli>` | Empty on success; output containing `Failed to` returns an error. |
 | `delete_file` | `RawDirective_delete_file` | No | `cli>` | Empty on success; output containing `Failed to remove` returns an error. |
 | `join` | `RawDirective_join` | No | `cli>` | Text; success must contain `connect: Connected`; error-code output returns execution failure. |
+| `wifi_auto` | `RawDirective_wifi_auto` | No | `cli>` | Text; query returns `on` / `off`; successful set returns an empty string. |
 | `alive` | `RawDirective_alive` | Yes | `<EOF>` | JSON text -> `Heartbeat`. |
 | `atime` | `RawDirective_atime` | Yes | `<EOF>` | Finds a JSON line containing `"seconds"` -> `LogLength`. |
 | `aversion` | `RawDirective_aversion` | Yes | `<EOF>` | JSON text -> `MKPVersion`. |
@@ -747,6 +817,10 @@ type JoinOption struct {
     Password string `json:"password"`
 }
 
+type WifiAutoOption struct {
+    State string `json:"state"`
+}
+
 type LogInfo struct {
     LogOption
     LogLength
@@ -773,7 +847,7 @@ type LogInfo struct {
 
 ### `helper` package methods
 
-Sync-output helpers such as `Alog`, `Astop`, `Join`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
+Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
 
 | Method | Command | Return |
 |---|---|---|
@@ -787,6 +861,7 @@ Sync-output helpers such as `Alog`, `Astop`, `Join`, `DeviceSN`, `ListDir`, `Cle
 | `CleanDir` / `CleanDirContext` | `clean_dir` | `error` |
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
 | `Join` / `JoinContext` | `join` | `string, error` |
+| `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
 | `Atime` / `AtimeContext` | `atime` | `*LogLength, error` |
 | `Aversion` / `AversionContext` | `aversion` | `*MKPVersion, error` |
@@ -807,7 +882,7 @@ Matching sync-output proxy methods on `Controller` also accept optional `mkpgo.D
 `controller.Controller` wraps helper functions and higher-level keyboard/mouse operations:
 
 - Recording/replay: `StartRecord`, `StopRecord`, `Alog`, `Astop`, `Cancel`
-- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `Alive`, `Atime`, `Aversion`, `AInspect`
+- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `Alive`, `Atime`, `Aversion`, `AInspect`
 - Keyboard: `KeyDown`, `KeyUp`, `KeyTap`, `KeyPresses`, `KeypadRelease`, `KeypadReleaseAll`
 - Mouse: `MouseClick`, `MouseClickWithOption`, `MouseScroll`, `MouseScrollWithOption`, `MouseScrollWithButton`, `MouseDown`, `MouseReleaseAll`, `MouseUp`, `M10Move`, `MouseMove`
 

@@ -59,6 +59,7 @@ fmt.Println(sn, err)
 | `clean_dir` | `clean_dir <path>` | 清空目录 | `helper.CleanDir` | 成功返回空；失败返回错误 |
 | `delete_file` | `delete_file <path>` | 删除文件 | `helper.DeleteFile` | 成功返回空；失败返回错误 |
 | `join` | `join [ssid password]` | 连接 Wi-Fi；无参数时使用最近保存配置 | `helper.Join` / `Controller.Join` | 文本，解析器 `RawDirective_join`；成功包含 `connect: Connected` |
+| `wifi_auto` | `wifi_auto [0|1]` | 查看或设置 Wi-Fi 自动连接状态 | `helper.WifiAuto` / `Controller.WifiAuto` | 文本，解析器 `RawDirective_wifi_auto`；查询返回 `on` / `off` |
 | `alive` | `alive` | 心跳/存活检测 | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | 获取日志时长 | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | 获取版本信息 | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -393,6 +394,74 @@ I (736872) connect: Connected
 cli>
 ```
 
+### `wifi_auto`：查看/设置 Wi-Fi 自动连接
+
+**CLI：**
+
+```text
+wifi_auto [0|1]
+```
+
+调用形式：
+
+```text
+wifi_auto
+wifi_auto 1
+wifi_auto 0
+```
+
+- 无参数时，查询自动连接状态。
+- `state == "1"` 时启用启动自动连接。
+- `state == "0"` 时关闭自动连接。
+
+**Go API：**
+
+```go
+// 查询当前状态，返回 "on" 或 "off"
+out, err := helper.WifiAuto(sfport, nil)
+
+// 启用自动连接
+out, err = helper.WifiAuto(sfport, &mkpgo.WifiAutoOption{State: "1"})
+
+// 禁用自动连接
+out, err = helper.WifiAuto(sfport, &mkpgo.WifiAutoOption{State: "0"})
+```
+
+`Controller` 代理：
+
+```go
+out, err := ctrl.WifiAuto(nil)
+out, err = ctrl.WifiAuto(&mkpgo.WifiAutoOption{State: "1"})
+```
+
+**解析器：** `RawDirective_wifi_auto`
+
+- 输出类型：文本，非 JSON。
+- 结束标记：`cli>`。
+- 查询成功判断：输出包含 `auto: on` 或 `auto: off`，分别返回 `"on"` / `"off"`。
+- 设置成功判断：`wifi_auto 1` / `wifi_auto 0` 输出为空且正常到达 `cli>` 时返回空字符串与 `nil` error。
+- 失败判断：输出包含 `Command returned non-zero error code` / `error code` 时返回 `ErrRawDirecitveExecutionFailed`。
+
+查询输出示例：
+
+```text
+wifi_auto
+auto: on
+
+cli>
+```
+
+设置输出示例：
+
+```text
+wifi_auto 1
+cli>
+```
+
+```text
+wifi_auto 0
+cli>
+```
 ### `alive`：心跳检测
 
 **CLI：**
@@ -688,6 +757,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `clean_dir` | `RawDirective_clean_dir` | 否 | `cli>` | 成功空返回；包含 `Failed to` 时返回错误。 |
 | `delete_file` | `RawDirective_delete_file` | 否 | `cli>` | 成功空返回；包含 `Failed to remove` 时返回错误。 |
 | `join` | `RawDirective_join` | 否 | `cli>` | 文本；成功需包含 `connect: Connected`，错误码输出返回执行失败。 |
+| `wifi_auto` | `RawDirective_wifi_auto` | 否 | `cli>` | 文本；查询返回 `on` / `off`；设置成功返回空字符串。 |
 | `alive` | `RawDirective_alive` | 是 | `<EOF>` | JSON 文本 -> `Heartbeat`。 |
 | `atime` | `RawDirective_atime` | 是 | `<EOF>` | 查找包含 `"seconds"` 的 JSON 行 -> `LogLength`。 |
 | `aversion` | `RawDirective_aversion` | 是 | `<EOF>` | JSON 文本 -> `MKPVersion`。 |
@@ -747,6 +817,10 @@ type JoinOption struct {
     Password string `json:"password"`
 }
 
+type WifiAutoOption struct {
+    State string `json:"state"`
+}
+
 type LogInfo struct {
     LogOption
     LogLength
@@ -773,7 +847,7 @@ type LogInfo struct {
 
 ### `helper` 包方法
 
-需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
+需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
 
 | 方法 | 对应指令 | 返回 |
 |---|---|---|
@@ -787,6 +861,7 @@ type LogInfo struct {
 | `CleanDir` / `CleanDirContext` | `clean_dir` | `error` |
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
 | `Join` / `JoinContext` | `join` | `string, error` |
+| `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
 | `Atime` / `AtimeContext` | `atime` | `*LogLength, error` |
 | `Aversion` / `AversionContext` | `aversion` | `*MKPVersion, error` |
@@ -807,7 +882,7 @@ type LogInfo struct {
 `controller.Controller` 封装了 helper 和键鼠高级操作：
 
 - 录制/回放：`StartRecord`、`StopRecord`、`Alog`、`Astop`、`Cancel`
-- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`Alive`、`Atime`、`Aversion`、`AInspect`
+- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`Alive`、`Atime`、`Aversion`、`AInspect`
 - 键盘：`KeyDown`、`KeyUp`、`KeyTap`、`KeyPresses`、`KeypadRelease`、`KeypadReleaseAll`
 - 鼠标：`MouseClick`、`MouseClickWithOption`、`MouseScroll`、`MouseScrollWithOption`、`MouseScrollWithButton`、`MouseDown`、`MouseReleaseAll`、`MouseUp`、`M10Move`、`MouseMove`
 

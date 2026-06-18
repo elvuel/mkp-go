@@ -136,6 +136,39 @@ func JoinContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.Joi
 	return "", mkpgo.ErrDirectiveParserMissing
 }
 
+// WifiAuto inspects or changes Wi-Fi auto-connect state using wifi_auto directive.
+// WifiAuto 使用 wifi_auto 指令查看或修改 Wi-Fi 自动连接状态；opt 为 nil 或空时查询当前状态。
+func WifiAuto(sfport *mkpgo.SFSerialPort, opt *mkpgo.WifiAutoOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return WifiAutoContext(context.Background(), sfport, opt, opts...)
+}
+
+// WifiAutoContext inspects or changes Wi-Fi auto-connect state using wifi_auto directive with context.
+// WifiAutoContext 使用 wifi_auto 指令和 context 查看或修改 Wi-Fi 自动连接状态；opt 为 nil 或空时查询当前状态。
+func WifiAutoContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.WifiAutoOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	if !sfport.SyncOuputEnabled {
+		return "", errors.New("please enable sync mode first")
+	}
+	if opt != nil && opt.State != "" && opt.State != "1" && opt.State != "0" {
+		return "", errors.New("wifi_auto state must be \"1\" or \"0\"")
+	}
+
+	directive := "wifi_auto"
+	if args := opt.CliArgs(); len(args) > 0 {
+		directive += " " + strings.Join(args, " ")
+	}
+
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		return parser.Parse(directive, result)
+	}
+
+	return "", mkpgo.ErrDirectiveParserMissing
+}
+
 // DeviceSN 指令 返回设备序列号
 func DeviceSN(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.SN, error) {
 	return DeviceSNContext(context.Background(), sfport, opts...)

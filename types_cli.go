@@ -91,6 +91,21 @@ func (opt *JoinOption) CliArgs() []string {
 	return args
 }
 
+// WifiAutoOption defines optional argument for wifi_auto command.
+// WifiAutoOption 定义 wifi_auto 命令的可选参数。
+type WifiAutoOption struct {
+	State string `json:"state"` // Auto-connect switch: "1" enables, "0" disables.
+}
+
+// CliArgs converts wifi_auto options to CLI argument list.
+// CliArgs 将 wifi_auto 参数转换为命令行参数数组。
+func (opt *WifiAutoOption) CliArgs() []string {
+	if opt == nil || opt.State == "" {
+		return nil
+	}
+	return []string{opt.State}
+}
+
 // LogInfo contains both log option metadata and duration.
 // LogInfo 同时包含日志参数与时长信息。
 type LogInfo struct {

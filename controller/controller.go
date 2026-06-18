@@ -115,6 +115,11 @@ func (c *Controller) Join(opt *mkpgo.JoinOption, opts ...mkpgo.DirectiveOption) 
 	return helper.Join(c.sfport, opt, opts...)
 }
 
+// helper func WifiAuto(sfport *mkpgo.SFSerialPort, opt *mkpgo.WifiAutoOption, opts ...mkpgo.DirectiveOption) (string, error)
+func (c *Controller) WifiAuto(opt *mkpgo.WifiAutoOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return helper.WifiAuto(c.sfport, opt, opts...)
+}
+
 // helper func DeviceSN(sfport *mkpgo.SFSerialPort) (*mkpgo.SN, error)
 func (c *Controller) DeviceSN(opts ...mkpgo.DirectiveOption) (*mkpgo.SN, error) {
 	return helper.DeviceSN(c.sfport, opts...)

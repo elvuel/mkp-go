@@ -32,6 +32,7 @@ var (
 	_ RawDirectiveOutputParser = (*RawDirective_sn)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_list_dir)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_join)(nil)
+	_ RawDirectiveOutputParser = (*RawDirective_wifi_auto)(nil)
 
 	// Built-in singleton parser instances.
 	// 内置解析器单例实例。
@@ -47,6 +48,7 @@ var (
 	InstantRawDirective_acancel     = NewRawDirective_acancel()
 	InstantRawDirective_alog        = NewRawDirective_alog()
 	InstantRawDirective_join        = NewRawDirective_join()
+	InstantRawDirective_wifi_auto   = NewRawDirective_wifi_auto()
 )
 
 // InitParsers registers built-in directive output parsers.
@@ -65,6 +67,7 @@ func InitParsers() {
 		InstantRawDirective_acancel,
 		InstantRawDirective_alog,
 		InstantRawDirective_join,
+		InstantRawDirective_wifi_auto,
 	}
 
 	for _, parser := range parsers {
@@ -610,6 +613,60 @@ func (r *RawDirective_join) Parse(cli, data string) (string, error) {
 	}
 
 	return "", ErrRawDirectiveParseFailed
+}
+
+// RawDirective_wifi_auto parses wifi_auto output.
+// RawDirective_wifi_auto 解析 wifi_auto 指令输出。
+type RawDirective_wifi_auto struct {
+	*RawDirective
+	Name string
+}
+
+// NewRawDirective_wifi_auto creates wifi_auto parser.
+// NewRawDirective_wifi_auto 创建 wifi_auto 解析器。
+func NewRawDirective_wifi_auto() *RawDirective_wifi_auto {
+	return &RawDirective_wifi_auto{Name: "wifi_auto", RawDirective: &RawDirective{JSONOutput: false}}
+}
+
+// String returns directive name.
+// String 返回对应指令名。
+func (r *RawDirective_wifi_auto) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_wifi_auto) EOFFlag() string {
+	return EOFCLI
+}
+
+// Parse parses wifi_auto raw output.
+// Parse 解析 wifi_auto 原始输出。
+func (r *RawDirective_wifi_auto) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+	data = strings.TrimSpace(data)
+	data = strings.TrimSuffix(data, EOFCLI)
+	data = strings.TrimSpace(data)
+
+	lower := strings.ToLower(data)
+	if strings.Contains(lower, "error code") {
+		return "", ErrRawDirecitveExecutionFailed
+	}
+	if strings.Contains(lower, "auto: on") {
+		return "on", nil
+	}
+	if strings.Contains(lower, "auto: off") {
+		return "off", nil
+	}
+	if len(strings.Fields(cli)) > 1 && data == "" {
+		return "", nil
+	}
+
+	return data, ErrRawDirectiveParseFailed
 }
 
 // RawDirective_alog parses alog output.
