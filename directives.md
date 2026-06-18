@@ -1,4 +1,4 @@
-﻿# MKP 指令帮助索引
+# MKP 指令帮助索引
 
 [English](./directives.en.md) | 中文
 
@@ -60,6 +60,7 @@ fmt.Println(sn, err)
 | `delete_file` | `delete_file <path>` | 删除文件 | `helper.DeleteFile` | 成功返回空；失败返回错误 |
 | `join` | `join [ssid password]` | 连接 Wi-Fi；无参数时使用最近保存配置 | `helper.Join` / `Controller.Join` | 文本，解析器 `RawDirective_join`；成功包含 `connect: Connected` |
 | `wifi_auto` | `wifi_auto [0|1]` | 查看或设置 Wi-Fi 自动连接状态 | `helper.WifiAuto` / `Controller.WifiAuto` | 文本，解析器 `RawDirective_wifi_auto`；查询返回 `on` / `off` |
+| `adumj` | `adumj <logPath>` | 将日志文件转为便于解读的 JSON | `helper.Adumj` / `Controller.Adumj` | JSON -> `ActionDump`；EOF 为 `cli>`，成功内容包含 `<EOF>` |
 | `alive` | `alive` | 心跳/存活检测 | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | 获取日志时长 | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | 获取版本信息 | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -462,6 +463,62 @@ cli>
 wifi_auto 0
 cli>
 ```
+
+### `adumj`：日志转 JSON
+
+**CLI：**
+
+```text
+adumj <logPath>
+```
+
+**Go API：**
+
+```go
+dump, err := helper.Adumj(sfport, &mkpgo.AdumjOption{LogPath: "demo-log"})
+fmt.Println(dump.Format, dump.Version, len(dump.Events))
+```
+
+`Controller` 代理：
+
+```go
+dump, err := ctrl.Adumj(&mkpgo.AdumjOption{LogPath: "demo-log"})
+```
+
+**解析器：** `RawDirective_adumj`
+
+- 输出类型：JSON。
+- 结束标记：`cli>`；成功输出中的 JSON 后仍可能包含固件输出的 `<EOF>` 行，解析器会剔除该行。
+- 失败判断：解析前 `PreFlight` 会将 `Command returned non-zero error code` 转为 `ErrRawDirecitveExecutionFailed`。
+- 解析时会跳过前置日志行，提取第一个 `{` 到最后一个 `}` 之间的 JSON。
+
+成功输出示例：
+
+```text
+adumj demo-log
+I (922627) alog: logfile /eMMC/applog/demo-log.log
+I (922635) alog: v2 format
+{
+  "format": "mkp-action-v1",
+  "version": "MKv2",
+  "meta": { "width": 1920, "height": 1080, "startX": 0, "startY": 0 },
+  "events": [
+    { "MouseMove": { "x": 1, "y": 2, "ts": 1064 } }
+  ]
+}
+<EOF>
+cli>
+```
+
+失败输出示例：
+
+```text
+adumj missing-log
+E (1084411) alog: Failed to open file /eMMC/applog/missing-log.log
+Command returned non-zero error code: 0xffffffff (ESP_FAIL)
+cli>
+```
+
 ### `alive`：心跳检测
 
 **CLI：**
@@ -758,6 +815,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `delete_file` | `RawDirective_delete_file` | 否 | `cli>` | 成功空返回；包含 `Failed to remove` 时返回错误。 |
 | `join` | `RawDirective_join` | 否 | `cli>` | 文本；成功需包含 `connect: Connected`，错误码输出返回执行失败。 |
 | `wifi_auto` | `RawDirective_wifi_auto` | 否 | `cli>` | 文本；查询返回 `on` / `off`；设置成功返回空字符串。 |
+| `adumj` | `RawDirective_adumj` | 是 | `cli>` | 提取 JSON 文本 -> `ActionDump`；成功输出中的 `<EOF>` 作为内容被解析器剔除。 |
 | `alive` | `RawDirective_alive` | 是 | `<EOF>` | JSON 文本 -> `Heartbeat`。 |
 | `atime` | `RawDirective_atime` | 是 | `<EOF>` | 查找包含 `"seconds"` 的 JSON 行 -> `LogLength`。 |
 | `aversion` | `RawDirective_aversion` | 是 | `<EOF>` | JSON 文本 -> `MKPVersion`。 |
@@ -821,6 +879,24 @@ type WifiAutoOption struct {
     State string `json:"state"`
 }
 
+type AdumjOption struct {
+    LogPath string `json:"logPath"`
+}
+
+type ActionDump struct {
+    Format  string                       `json:"format"`
+    Version string                       `json:"version"`
+    Meta    ActionDumpMeta               `json:"meta"`
+    Events  []map[string]json.RawMessage `json:"events"`
+}
+
+type ActionDumpMeta struct {
+    Width  int `json:"width"`
+    Height int `json:"height"`
+    StartX int `json:"startX"`
+    StartY int `json:"startY"`
+}
+
 type LogInfo struct {
     LogOption
     LogLength
@@ -847,7 +923,7 @@ type LogInfo struct {
 
 ### `helper` 包方法
 
-需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
+需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`Adumj`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
 
 | 方法 | 对应指令 | 返回 |
 |---|---|---|
@@ -862,6 +938,7 @@ type LogInfo struct {
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
 | `Join` / `JoinContext` | `join` | `string, error` |
 | `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
+| `Adumj` / `AdumjContext` | `adumj` | `*ActionDump, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
 | `Atime` / `AtimeContext` | `atime` | `*LogLength, error` |
 | `Aversion` / `AversionContext` | `aversion` | `*MKPVersion, error` |
@@ -882,7 +959,7 @@ type LogInfo struct {
 `controller.Controller` 封装了 helper 和键鼠高级操作：
 
 - 录制/回放：`StartRecord`、`StopRecord`、`Alog`、`Astop`、`Cancel`
-- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`Alive`、`Atime`、`Aversion`、`AInspect`
+- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`Adumj`、`Alive`、`Atime`、`Aversion`、`AInspect`
 - 键盘：`KeyDown`、`KeyUp`、`KeyTap`、`KeyPresses`、`KeypadRelease`、`KeypadReleaseAll`
 - 鼠标：`MouseClick`、`MouseClickWithOption`、`MouseScroll`、`MouseScrollWithOption`、`MouseScrollWithButton`、`MouseDown`、`MouseReleaseAll`、`MouseUp`、`M10Move`、`MouseMove`
 
@@ -911,5 +988,3 @@ type LogInfo struct {
 2. `useStates`：`1/0`；默认 `1`。`1` 表示恢复前使用 `apause` 保存的键鼠状态；`0` 表示直接恢复回放。
 
 备注：`apause` 保存的状态在 `alog`、`astop`、`acancel`、`aresume` 后直接清除。
-
-

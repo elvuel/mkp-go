@@ -1,4 +1,4 @@
-﻿# MKP Command Reference
+# MKP Command Reference
 
 English | [中文](./directives.md)
 
@@ -60,6 +60,7 @@ fmt.Println(sn, err)
 | `delete_file` | `delete_file <path>` | Delete a file | `helper.DeleteFile` | Empty on success; error on failure |
 | `join` | `join [ssid password]` | Connect Wi-Fi; without args, use the most recently saved config | `helper.Join` / `Controller.Join` | Text parser `RawDirective_join`; success contains `connect: Connected` |
 | `wifi_auto` | `wifi_auto [0|1]` | Inspect or set Wi-Fi auto-connect state | `helper.WifiAuto` / `Controller.WifiAuto` | Text parser `RawDirective_wifi_auto`; query returns `on` / `off` |
+| `adumj` | `adumj <logPath>` | Dump a log file as readable JSON | `helper.Adumj` / `Controller.Adumj` | JSON -> `ActionDump`; EOF is `cli>`; successful output contains `<EOF>` |
 | `alive` | `alive` | Heartbeat / liveness check | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | Get log duration | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | Get firmware/application version | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -462,6 +463,62 @@ cli>
 wifi_auto 0
 cli>
 ```
+
+### `adumj`: dump log as JSON
+
+**CLI:**
+
+```text
+adumj <logPath>
+```
+
+**Go API:**
+
+```go
+dump, err := helper.Adumj(sfport, &mkpgo.AdumjOption{LogPath: "demo-log"})
+fmt.Println(dump.Format, dump.Version, len(dump.Events))
+```
+
+`Controller` proxy:
+
+```go
+dump, err := ctrl.Adumj(&mkpgo.AdumjOption{LogPath: "demo-log"})
+```
+
+**Parser:** `RawDirective_adumj`
+
+- Output type: JSON.
+- EOF marker: `cli>`; successful output may still contain a firmware `<EOF>` line after the JSON, and the parser strips it.
+- Failure detection: `PreFlight` turns `Command returned non-zero error code` into `ErrRawDirecitveExecutionFailed`.
+- The parser skips leading log lines and extracts JSON from the first `{` through the last `}`.
+
+Successful output example:
+
+```text
+adumj demo-log
+I (922627) alog: logfile /eMMC/applog/demo-log.log
+I (922635) alog: v2 format
+{
+  "format": "mkp-action-v1",
+  "version": "MKv2",
+  "meta": { "width": 1920, "height": 1080, "startX": 0, "startY": 0 },
+  "events": [
+    { "MouseMove": { "x": 1, "y": 2, "ts": 1064 } }
+  ]
+}
+<EOF>
+cli>
+```
+
+Failure output example:
+
+```text
+adumj missing-log
+E (1084411) alog: Failed to open file /eMMC/applog/missing-log.log
+Command returned non-zero error code: 0xffffffff (ESP_FAIL)
+cli>
+```
+
 ### `alive`: heartbeat check
 
 **CLI:**
@@ -758,6 +815,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `delete_file` | `RawDirective_delete_file` | No | `cli>` | Empty on success; output containing `Failed to remove` returns an error. |
 | `join` | `RawDirective_join` | No | `cli>` | Text; success must contain `connect: Connected`; error-code output returns execution failure. |
 | `wifi_auto` | `RawDirective_wifi_auto` | No | `cli>` | Text; query returns `on` / `off`; successful set returns an empty string. |
+| `adumj` | `RawDirective_adumj` | Yes | `cli>` | Extracts JSON text -> `ActionDump`; the `<EOF>` line in successful output is stripped as content. |
 | `alive` | `RawDirective_alive` | Yes | `<EOF>` | JSON text -> `Heartbeat`. |
 | `atime` | `RawDirective_atime` | Yes | `<EOF>` | Finds a JSON line containing `"seconds"` -> `LogLength`. |
 | `aversion` | `RawDirective_aversion` | Yes | `<EOF>` | JSON text -> `MKPVersion`. |
@@ -821,6 +879,24 @@ type WifiAutoOption struct {
     State string `json:"state"`
 }
 
+type AdumjOption struct {
+    LogPath string `json:"logPath"`
+}
+
+type ActionDump struct {
+    Format  string                       `json:"format"`
+    Version string                       `json:"version"`
+    Meta    ActionDumpMeta               `json:"meta"`
+    Events  []map[string]json.RawMessage `json:"events"`
+}
+
+type ActionDumpMeta struct {
+    Width  int `json:"width"`
+    Height int `json:"height"`
+    StartX int `json:"startX"`
+    StartY int `json:"startY"`
+}
+
 type LogInfo struct {
     LogOption
     LogLength
@@ -847,7 +923,7 @@ type LogInfo struct {
 
 ### `helper` package methods
 
-Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
+Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `Adumj`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
 
 | Method | Command | Return |
 |---|---|---|
@@ -862,6 +938,7 @@ Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `DeviceSN`, `Li
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
 | `Join` / `JoinContext` | `join` | `string, error` |
 | `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
+| `Adumj` / `AdumjContext` | `adumj` | `*ActionDump, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
 | `Atime` / `AtimeContext` | `atime` | `*LogLength, error` |
 | `Aversion` / `AversionContext` | `aversion` | `*MKPVersion, error` |
@@ -882,7 +959,7 @@ Matching sync-output proxy methods on `Controller` also accept optional `mkpgo.D
 `controller.Controller` wraps helper functions and higher-level keyboard/mouse operations:
 
 - Recording/replay: `StartRecord`, `StopRecord`, `Alog`, `Astop`, `Cancel`
-- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `Alive`, `Atime`, `Aversion`, `AInspect`
+- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `Adumj`, `Alive`, `Atime`, `Aversion`, `AInspect`
 - Keyboard: `KeyDown`, `KeyUp`, `KeyTap`, `KeyPresses`, `KeypadRelease`, `KeypadReleaseAll`
 - Mouse: `MouseClick`, `MouseClickWithOption`, `MouseScroll`, `MouseScrollWithOption`, `MouseScrollWithButton`, `MouseDown`, `MouseReleaseAll`, `MouseUp`, `M10Move`, `MouseMove`
 

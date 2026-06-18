@@ -165,6 +165,11 @@ func (c *Controller) Aversion(opts ...mkpgo.DirectiveOption) (*mkpgo.MKPVersion,
 	return helper.Aversion(c.sfport, opts...)
 }
 
+// helper func Adumj(sfport *mkpgo.SFSerialPort, opt *mkpgo.AdumjOption, opts ...mkpgo.DirectiveOption) (*mkpgo.ActionDump, error)
+func (c *Controller) Adumj(opt *mkpgo.AdumjOption, opts ...mkpgo.DirectiveOption) (*mkpgo.ActionDump, error) {
+	return helper.Adumj(c.sfport, opt, opts...)
+}
+
 // helper func AInspect(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogInfo, error)
 func (c *Controller) AInspect(path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogInfo, error) {
 	return helper.AInspect(c.sfport, path, opts...)

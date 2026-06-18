@@ -475,6 +475,46 @@ func AversionContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mk
 	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
+// Adumj dumps an action log as readable JSON using adumj directive.
+// Adumj 使用 adumj 指令将动作日志转储为便于解读的 JSON。
+func Adumj(sfport *mkpgo.SFSerialPort, opt *mkpgo.AdumjOption, opts ...mkpgo.DirectiveOption) (*mkpgo.ActionDump, error) {
+	return AdumjContext(context.Background(), sfport, opt, opts...)
+}
+
+// AdumjContext dumps an action log as readable JSON using adumj directive with context.
+// AdumjContext 使用 adumj 指令和 context 将动作日志转储为便于解读的 JSON。
+func AdumjContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.AdumjOption, opts ...mkpgo.DirectiveOption) (*mkpgo.ActionDump, error) {
+	if !sfport.SyncOuputEnabled {
+		return nil, errors.New("please enable sync mode first")
+	}
+	if opt == nil || opt.LogPath == "" {
+		return nil, errors.New("adumj log path is required")
+	}
+
+	directive := "adumj " + strings.Join(opt.CliArgs(), " ")
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		parsedResult, err := parser.Parse(directive, result)
+		if err != nil {
+			return nil, err
+		}
+		if parser.IsJSONOutput() {
+			dump := &mkpgo.ActionDump{}
+			err = parser.UnmarshalTo(parsedResult, dump)
+			if err != nil {
+				return nil, err
+			}
+			return dump, nil
+		}
+	}
+
+	return nil, mkpgo.ErrDirectiveParserMissing
+}
+
 // AInspect 指令 返回 日志基础信息。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
 func AInspect(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogInfo, error) {
 	return AInspectContext(context.Background(), sfport, path, opts...)

@@ -33,6 +33,7 @@ var (
 	_ RawDirectiveOutputParser = (*RawDirective_list_dir)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_join)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_wifi_auto)(nil)
+	_ RawDirectiveOutputParser = (*RawDirective_adumj)(nil)
 
 	// Built-in singleton parser instances.
 	// 内置解析器单例实例。
@@ -49,6 +50,7 @@ var (
 	InstantRawDirective_alog        = NewRawDirective_alog()
 	InstantRawDirective_join        = NewRawDirective_join()
 	InstantRawDirective_wifi_auto   = NewRawDirective_wifi_auto()
+	InstantRawDirective_adumj       = NewRawDirective_adumj()
 )
 
 // InitParsers registers built-in directive output parsers.
@@ -68,6 +70,7 @@ func InitParsers() {
 		InstantRawDirective_alog,
 		InstantRawDirective_join,
 		InstantRawDirective_wifi_auto,
+		InstantRawDirective_adumj,
 	}
 
 	for _, parser := range parsers {
@@ -663,6 +666,57 @@ func (r *RawDirective_wifi_auto) Parse(cli, data string) (string, error) {
 		return "off", nil
 	}
 	if len(strings.Fields(cli)) > 1 && data == "" {
+		return "", nil
+	}
+
+	return data, ErrRawDirectiveParseFailed
+}
+
+// RawDirective_adumj parses adumj output (action log JSON dump).
+// RawDirective_adumj 解析 adumj 指令输出（动作日志 JSON dump）。
+type RawDirective_adumj struct {
+	*RawDirective
+	Name string
+}
+
+// NewRawDirective_adumj creates adumj parser.
+// NewRawDirective_adumj 创建 adumj 解析器。
+func NewRawDirective_adumj() *RawDirective_adumj {
+	return &RawDirective_adumj{Name: "adumj", RawDirective: &RawDirective{JSONOutput: true}}
+}
+
+// String returns directive name.
+// String 返回对应指令名。
+func (r *RawDirective_adumj) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_adumj) EOFFlag() string {
+	return EOFCLI
+}
+
+// Parse parses adumj raw output.
+// Parse 解析 adumj 原始输出。
+func (r *RawDirective_adumj) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+	data = strings.TrimSpace(data)
+	data = strings.TrimSuffix(data, EOFCLI)
+	data = strings.TrimSpace(data)
+	data = strings.TrimSuffix(data, EOFDefault)
+	data = strings.TrimSpace(data)
+
+	start := strings.Index(data, "{")
+	end := strings.LastIndex(data, "}")
+	if start >= 0 && end >= start {
+		return strings.TrimSpace(data[start : end+1]), nil
+	}
+	if data == "" {
 		return "", nil
 	}
 

@@ -1,6 +1,7 @@
 package mkpgo
 
 import (
+	"encoding/json"
 	"fmt"
 )
 
@@ -104,6 +105,39 @@ func (opt *WifiAutoOption) CliArgs() []string {
 		return nil
 	}
 	return []string{opt.State}
+}
+
+// AdumjOption defines arguments for adumj command.
+// AdumjOption 定义 adumj 命令参数。
+type AdumjOption struct {
+	LogPath string `json:"logPath"` // Log file path/name.
+}
+
+// CliArgs converts adumj options to CLI argument list.
+// CliArgs 将 adumj 参数转换为命令行参数数组。
+func (opt *AdumjOption) CliArgs() []string {
+	if opt == nil || opt.LogPath == "" {
+		return nil
+	}
+	return []string{opt.LogPath}
+}
+
+// ActionDump is the JSON output model returned by adumj.
+// ActionDump 是 adumj 返回的动作日志 JSON 结构。
+type ActionDump struct {
+	Format  string                       `json:"format"`
+	Version string                       `json:"version"`
+	Meta    ActionDumpMeta               `json:"meta"`
+	Events  []map[string]json.RawMessage `json:"events"`
+}
+
+// ActionDumpMeta describes action log capture metadata.
+// ActionDumpMeta 描述动作日志录制元信息。
+type ActionDumpMeta struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+	StartX int `json:"startX"`
+	StartY int `json:"startY"`
 }
 
 // LogInfo contains both log option metadata and duration.
