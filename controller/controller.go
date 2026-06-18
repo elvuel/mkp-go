@@ -175,6 +175,11 @@ func (c *Controller) ADownloadFromMKP(opt *mkpgo.APutOption, opts ...mkpgo.Direc
 	return helper.ADownloadFromMKP(c.sfport, opt, opts...)
 }
 
+// helper func AJSON2Log(sfport *mkpgo.SFSerialPort, opt *mkpgo.AJSON2LogOption, opts ...mkpgo.DirectiveOption) (string, error)
+func (c *Controller) AJSON2Log(opt *mkpgo.AJSON2LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return helper.AJSON2Log(c.sfport, opt, opts...)
+}
+
 // helper func AHTTPBase(sfport *mkpgo.SFSerialPort, opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error)
 func (c *Controller) AHTTPBase(opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error) {
 	return helper.AHTTPBase(c.sfport, opt, opts...)

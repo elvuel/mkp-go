@@ -533,6 +533,38 @@ func ADownloadFromMKPContext(ctx context.Context, sfport *mkpgo.SFSerialPort, op
 	return "", mkpgo.ErrDirectiveParserMissing
 }
 
+// AJSON2Log converts an adumj JSON file back to MKP log format using ajson2log directive.
+// AJSON2Log 使用 ajson2log 指令将 adumj JSON 文件转回 MKP log 格式。
+func AJSON2Log(sfport *mkpgo.SFSerialPort, opt *mkpgo.AJSON2LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return AJSON2LogContext(context.Background(), sfport, opt, opts...)
+}
+
+// AJSON2LogContext converts an adumj JSON file back to MKP log format using ajson2log directive with context.
+// AJSON2LogContext 使用 ajson2log 指令和 context 将 adumj JSON 文件转回 MKP log 格式。
+func AJSON2LogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.AJSON2LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	if !sfport.SyncOuputEnabled {
+		return "", errors.New("please enable sync mode first")
+	}
+	if opt == nil || opt.JSONPath == "" {
+		return "", errors.New("ajson2log json path is required")
+	}
+	if opt.OutputLogPath == "" {
+		return "", errors.New("ajson2log output log path is required")
+	}
+
+	directive := "ajson2log " + strings.Join(opt.CliArgs(), " ")
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		return parser.Parse(directive, result)
+	}
+
+	return "", mkpgo.ErrDirectiveParserMissing
+}
+
 // AHTTPBase inspects or sets file-management API endpoint base URL using ahttpbase directive.
 // AHTTPBase 使用 ahttpbase 指令查看或设置文件管理服务器 API endpoint base URL。
 func AHTTPBase(sfport *mkpgo.SFSerialPort, opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error) {

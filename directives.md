@@ -64,6 +64,7 @@ fmt.Println(sn, err)
 | `ahttpbase` | `ahttpbase [url]` | 查看或设置文件管理服务器 API endpoint base URL | `helper.AHTTPBase` / `Controller.AHTTPBase` | JSON -> `AHTTPBase`；EOF 为 `cli>` |
 | `aget` | `aget <filepath>` | 从 file server 下载指定文件到 MKP 对应路径 | `helper.AUploadToMKP` / `Controller.AUploadToMKP` | 文本；成功包含 `GET status=200` |
 | `aput` | `aput <filepath>` | 从 MKP 下载/上传指定文件到 file server 对应路径 | `helper.ADownloadFromMKP` / `Controller.ADownloadFromMKP` | 文本；成功包含 `Upload OK` |
+| `ajson2log` | `ajson2log <jsonpath> -o <outputlogpath>` | 将 adumj JSON 转回 MKP log 格式 | `helper.AJSON2Log` / `Controller.AJSON2Log` | 文本；失败包含 `error code` |
 | `alive` | `alive` | 心跳/存活检测 | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | 获取日志时长 | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | 获取版本信息 | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -648,6 +649,64 @@ Upload FAILED
 Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
+### `ajson2log`：将 adumj JSON 转回 MKP log
+
+**CLI：**
+
+```text
+ajson2log <jsonpath> -o <outputlogpath>
+```
+
+示例：
+
+```text
+ajson2log jsons/aaaa.json -o jsons/aaaa.log
+```
+
+**Go API：**
+
+```go
+output, err := helper.AJSON2Log(sfport, &mkpgo.AJSON2LogOption{
+    JSONPath:      "jsons/aaaa.json",
+    OutputLogPath: "jsons/aaaa.log",
+})
+fmt.Println(output)
+```
+
+`Controller` 代理：
+
+```go
+output, err := ctrl.AJSON2Log(&mkpgo.AJSON2LogOption{
+    JSONPath:      "jsons/aaaa.json",
+    OutputLogPath: "jsons/aaaa.log",
+})
+```
+
+**解析器：** `RawDirective_ajson2log`
+
+- 输出类型：非 JSON。
+- 结束标记：`cli>`。
+- 成功判断：输出不包含 `error code`，解析器返回清洗后的原始输出。
+- 失败判断：输出包含 `Command returned non-zero error code` / `error code` 时返回 `ErrRawDirecitveExecutionFailed`。
+
+成功输出示例：
+
+```text
+ajson2log jsons/aaaa.json -o jsons/aaaa.log
+I (140523) ajson2log: Written /eMMC/applog/jsons/aaaa.log (version=MKv2, mouse=1, kbd=0)
+JSON -> log: /eMMC/applog/jsons/aaaa.log
+
+cli>
+```
+
+失败输出示例：
+
+```text
+ajson2log jsons/aaaattt.json -o jsons/aaaa.log
+E (374939) ajson2log: Cannot open /eMMC/applog/jsons/aaaattt.json
+Command returned non-zero error code: 0xffffffff (ESP_FAIL)
+cli>
+```
 ### `ahttpbase`：文件管理服务器 API endpoint base URL
 
 **CLI：**
@@ -997,6 +1056,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `ahttpbase` | `RawDirective_ahttpbase` | 是 | `cli>` | 查询时提取 JSON -> `AHTTPBase`；设置成功 `OK` 时合成 JSON。 |
 | `aget` | `RawDirective_aget` | 否 | `cli>` | 文本；成功包含 `GET status=200`；非 200 状态返回执行失败。 |
 | `aput` | `RawDirective_aput` | 否 | `cli>` | 文本；成功包含 `Upload OK`；失败输出返回执行失败。 |
+| `ajson2log` | `RawDirective_ajson2log` | 否 | `cli>` | 文本；无 `error code` 视为成功，失败输出返回执行失败。 |
 | `alive` | `RawDirective_alive` | 是 | `<EOF>` | JSON 文本 -> `Heartbeat`。 |
 | `atime` | `RawDirective_atime` | 是 | `<EOF>` | 查找包含 `"seconds"` 的 JSON 行 -> `LogLength`。 |
 | `aversion` | `RawDirective_aversion` | 是 | `<EOF>` | JSON 文本 -> `MKPVersion`。 |
@@ -1068,6 +1128,11 @@ type APutOption struct {
     FilePath string `json:"filepath"`
 }
 
+type AJSON2LogOption struct {
+    JSONPath      string `json:"jsonpath"`
+    OutputLogPath string `json:"outputlogpath"`
+}
+
 type AHTTPBaseOption struct {
     URL string `json:"url"`
 }
@@ -1120,7 +1185,7 @@ type LogInfo struct {
 
 ### `helper` 包方法
 
-需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`AUploadToMKP`、`ADownloadFromMKP`、`AHTTPBase`、`Adumj`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
+需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`AUploadToMKP`、`ADownloadFromMKP`、`AJSON2Log`、`AHTTPBase`、`Adumj`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
 
 | 方法 | 对应指令 | 返回 |
 |---|---|---|
@@ -1137,6 +1202,7 @@ type LogInfo struct {
 | `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
 | `AUploadToMKP` / `AUploadToMKPContext` | `aget` | `string, error` |
 | `ADownloadFromMKP` / `ADownloadFromMKPContext` | `aput` | `string, error` |
+| `AJSON2Log` / `AJSON2LogContext` | `ajson2log` | `string, error` |
 | `AHTTPBase` / `AHTTPBaseContext` | `ahttpbase` | `*AHTTPBase, error` |
 | `Adumj` / `AdumjContext` | `adumj` | `*ActionDump, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
@@ -1159,7 +1225,7 @@ type LogInfo struct {
 `controller.Controller` 封装了 helper 和键鼠高级操作：
 
 - 录制/回放：`StartRecord`、`StopRecord`、`Alog`、`Astop`、`Cancel`
-- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`AUploadToMKP`、`ADownloadFromMKP`、`AHTTPBase`、`Adumj`、`Alive`、`Atime`、`Aversion`、`AInspect`
+- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`AUploadToMKP`、`ADownloadFromMKP`、`AJSON2Log`、`AHTTPBase`、`Adumj`、`Alive`、`Atime`、`Aversion`、`AInspect`
 - 键盘：`KeyDown`、`KeyUp`、`KeyTap`、`KeyPresses`、`KeypadRelease`、`KeypadReleaseAll`
 - 鼠标：`MouseClick`、`MouseClickWithOption`、`MouseScroll`、`MouseScrollWithOption`、`MouseScrollWithButton`、`MouseDown`、`MouseReleaseAll`、`MouseUp`、`M10Move`、`MouseMove`
 

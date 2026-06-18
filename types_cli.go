@@ -137,6 +137,26 @@ func (opt *APutOption) CliArgs() []string {
 	return []string{opt.FilePath}
 }
 
+// AJSON2LogOption defines arguments for ajson2log command.
+// AJSON2LogOption 定义 ajson2log 命令参数。
+type AJSON2LogOption struct {
+	JSONPath      string `json:"jsonpath"`      // adumj JSON file path.
+	OutputLogPath string `json:"outputlogpath"` // Converted output log file path.
+}
+
+// CliArgs converts ajson2log options to CLI argument list.
+// CliArgs 将 ajson2log 参数转换为命令行参数数组。
+func (opt *AJSON2LogOption) CliArgs() []string {
+	if opt == nil || opt.JSONPath == "" {
+		return nil
+	}
+	args := []string{opt.JSONPath}
+	if opt.OutputLogPath != "" {
+		args = append(args, "-o", opt.OutputLogPath)
+	}
+	return args
+}
+
 // AHTTPBaseOption defines optional argument for ahttpbase command.
 // AHTTPBaseOption 定义 ahttpbase 命令的可选参数。
 type AHTTPBaseOption struct {

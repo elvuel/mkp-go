@@ -37,6 +37,7 @@ var (
 	_ RawDirectiveOutputParser = (*RawDirective_ahttpbase)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_aget)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_aput)(nil)
+	_ RawDirectiveOutputParser = (*RawDirective_ajson2log)(nil)
 
 	// Built-in singleton parser instances.
 	// 内置解析器单例实例。
@@ -57,6 +58,7 @@ var (
 	InstantRawDirective_ahttpbase   = NewRawDirective_ahttpbase()
 	InstantRawDirective_aget        = NewRawDirective_aget()
 	InstantRawDirective_aput        = NewRawDirective_aput()
+	InstantRawDirective_ajson2log   = NewRawDirective_ajson2log()
 )
 
 // InitParsers registers built-in directive output parsers.
@@ -80,6 +82,7 @@ func InitParsers() {
 		InstantRawDirective_ahttpbase,
 		InstantRawDirective_aget,
 		InstantRawDirective_aput,
+		InstantRawDirective_ajson2log,
 	}
 
 	for _, parser := range parsers {
@@ -774,7 +777,7 @@ func (r *RawDirective_aget) Parse(cli, data string) (string, error) {
 		return "", ErrRawDirecitveExecutionFailed
 	}
 	if strings.Contains(data, "GET status=200") {
-		return "OK", nil
+		return data, nil
 	}
 	if strings.Contains(data, "GET status=") {
 		return "", ErrRawDirecitveExecutionFailed
@@ -828,13 +831,61 @@ func (r *RawDirective_aput) Parse(cli, data string) (string, error) {
 		return "", ErrRawDirecitveExecutionFailed
 	}
 	if strings.Contains(data, "Upload OK") {
-		return "OK", nil
+		return data, nil
 	}
 	if data == "" {
 		return "", ErrRawDirectiveParseFailed
 	}
 
 	return data, ErrRawDirectiveParseFailed
+}
+
+// RawDirective_ajson2log parses ajson2log output (convert adumj JSON back to MKP log).
+// RawDirective_ajson2log 解析 ajson2log 指令输出（将 adumj JSON 转回 MKP log）。
+type RawDirective_ajson2log struct {
+	*RawDirective
+	Name string
+}
+
+// NewRawDirective_ajson2log creates ajson2log parser.
+// NewRawDirective_ajson2log 创建 ajson2log 解析器。
+func NewRawDirective_ajson2log() *RawDirective_ajson2log {
+	return &RawDirective_ajson2log{Name: "ajson2log", RawDirective: &RawDirective{JSONOutput: false}}
+}
+
+// String returns directive name.
+// String 返回对应指令名。
+func (r *RawDirective_ajson2log) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_ajson2log) EOFFlag() string {
+	return EOFCLI
+}
+
+// Parse parses ajson2log raw output.
+// Parse 解析 ajson2log 原始输出。
+func (r *RawDirective_ajson2log) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+	data = strings.TrimSpace(data)
+	data = strings.TrimSuffix(data, EOFCLI)
+	data = strings.TrimSpace(data)
+
+	lower := strings.ToLower(data)
+	if strings.Contains(lower, "error code") {
+		return "", ErrRawDirecitveExecutionFailed
+	}
+	if data == "" {
+		return "", ErrRawDirectiveParseFailed
+	}
+
+	return data, nil
 }
 
 // RawDirective_ahttpbase parses ahttpbase output (file-management API endpoint base URL).

@@ -64,6 +64,7 @@ fmt.Println(sn, err)
 | `ahttpbase` | `ahttpbase [url]` | Inspect or set file-management API endpoint base URL | `helper.AHTTPBase` / `Controller.AHTTPBase` | JSON -> `AHTTPBase`; EOF is `cli>` |
 | `aget` | `aget <filepath>` | Download a file-server file to the corresponding MKP path | `helper.AUploadToMKP` / `Controller.AUploadToMKP` | Text; success contains `GET status=200` |
 | `aput` | `aput <filepath>` | Download/upload a MKP file to the corresponding file-server path | `helper.ADownloadFromMKP` / `Controller.ADownloadFromMKP` | Text; success contains `Upload OK` |
+| `ajson2log` | `ajson2log <jsonpath> -o <outputlogpath>` | Convert adumj JSON back to MKP log format | `helper.AJSON2Log` / `Controller.AJSON2Log` | Text; failures contain `error code` |
 | `alive` | `alive` | Heartbeat / liveness check | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | Get log duration | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | Get firmware/application version | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -648,6 +649,64 @@ Upload FAILED
 Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
+### `ajson2log`: convert adumj JSON back to MKP log
+
+**CLI:**
+
+```text
+ajson2log <jsonpath> -o <outputlogpath>
+```
+
+Example:
+
+```text
+ajson2log jsons/aaaa.json -o jsons/aaaa.log
+```
+
+**Go API:**
+
+```go
+output, err := helper.AJSON2Log(sfport, &mkpgo.AJSON2LogOption{
+    JSONPath:      "jsons/aaaa.json",
+    OutputLogPath: "jsons/aaaa.log",
+})
+fmt.Println(output)
+```
+
+`Controller` proxy:
+
+```go
+output, err := ctrl.AJSON2Log(&mkpgo.AJSON2LogOption{
+    JSONPath:      "jsons/aaaa.json",
+    OutputLogPath: "jsons/aaaa.log",
+})
+```
+
+**Parser:** `RawDirective_ajson2log`
+
+- Output type: non-JSON.
+- EOF marker: `cli>`.
+- Success detection: if output does not contain `error code`, the parser returns the cleaned raw output.
+- Failure detection: output contains `Command returned non-zero error code` / `error code`; parser returns `ErrRawDirecitveExecutionFailed`.
+
+Success output example:
+
+```text
+ajson2log jsons/aaaa.json -o jsons/aaaa.log
+I (140523) ajson2log: Written /eMMC/applog/jsons/aaaa.log (version=MKv2, mouse=1, kbd=0)
+JSON -> log: /eMMC/applog/jsons/aaaa.log
+
+cli>
+```
+
+Failure output example:
+
+```text
+ajson2log jsons/aaaattt.json -o jsons/aaaa.log
+E (374939) ajson2log: Cannot open /eMMC/applog/jsons/aaaattt.json
+Command returned non-zero error code: 0xffffffff (ESP_FAIL)
+cli>
+```
 ### `ahttpbase`: file-management API endpoint base URL
 
 **CLI:**
@@ -997,6 +1056,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `ahttpbase` | `RawDirective_ahttpbase` | Yes | `cli>` | Query extracts JSON -> `AHTTPBase`; successful set `OK` is synthesized as JSON. |
 | `aget` | `RawDirective_aget` | No | `cli>` | Text; success contains `GET status=200`; non-200 status returns execution failure. |
 | `aput` | `RawDirective_aput` | No | `cli>` | Text; success contains `Upload OK`; failure output returns execution failure. |
+| `ajson2log` | `RawDirective_ajson2log` | No | `cli>` | Text; no `error code` means success; failure output returns execution failure. |
 | `alive` | `RawDirective_alive` | Yes | `<EOF>` | JSON text -> `Heartbeat`. |
 | `atime` | `RawDirective_atime` | Yes | `<EOF>` | Finds a JSON line containing `"seconds"` -> `LogLength`. |
 | `aversion` | `RawDirective_aversion` | Yes | `<EOF>` | JSON text -> `MKPVersion`. |
@@ -1068,6 +1128,11 @@ type APutOption struct {
     FilePath string `json:"filepath"`
 }
 
+type AJSON2LogOption struct {
+    JSONPath      string `json:"jsonpath"`
+    OutputLogPath string `json:"outputlogpath"`
+}
+
 type AHTTPBaseOption struct {
     URL string `json:"url"`
 }
@@ -1120,7 +1185,7 @@ type LogInfo struct {
 
 ### `helper` package methods
 
-Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AUploadToMKP`, `ADownloadFromMKP`, `AHTTPBase`, `Adumj`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
+Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AUploadToMKP`, `ADownloadFromMKP`, `AJSON2Log`, `AHTTPBase`, `Adumj`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
 
 | Method | Command | Return |
 |---|---|---|
@@ -1137,6 +1202,7 @@ Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AUploadToMKP`,
 | `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
 | `AUploadToMKP` / `AUploadToMKPContext` | `aget` | `string, error` |
 | `ADownloadFromMKP` / `ADownloadFromMKPContext` | `aput` | `string, error` |
+| `AJSON2Log` / `AJSON2LogContext` | `ajson2log` | `string, error` |
 | `AHTTPBase` / `AHTTPBaseContext` | `ahttpbase` | `*AHTTPBase, error` |
 | `Adumj` / `AdumjContext` | `adumj` | `*ActionDump, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
@@ -1159,7 +1225,7 @@ Matching sync-output proxy methods on `Controller` also accept optional `mkpgo.D
 `controller.Controller` wraps helper functions and higher-level keyboard/mouse operations:
 
 - Recording/replay: `StartRecord`, `StopRecord`, `Alog`, `Astop`, `Cancel`
-- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `AUploadToMKP`, `ADownloadFromMKP`, `AHTTPBase`, `Adumj`, `Alive`, `Atime`, `Aversion`, `AInspect`
+- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `AUploadToMKP`, `ADownloadFromMKP`, `AJSON2Log`, `AHTTPBase`, `Adumj`, `Alive`, `Atime`, `Aversion`, `AInspect`
 - Keyboard: `KeyDown`, `KeyUp`, `KeyTap`, `KeyPresses`, `KeypadRelease`, `KeypadReleaseAll`
 - Mouse: `MouseClick`, `MouseClickWithOption`, `MouseScroll`, `MouseScrollWithOption`, `MouseScrollWithButton`, `MouseDown`, `MouseReleaseAll`, `MouseUp`, `M10Move`, `MouseMove`
 
