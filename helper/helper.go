@@ -475,6 +475,64 @@ func AversionContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mk
 	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
+// AUploadToMKP uploads a file-server file to the corresponding MKP path using aget directive.
+// AUploadToMKP 使用 aget 指令将文件服务器中的文件下载/上传到 MKP 对应路径。
+func AUploadToMKP(sfport *mkpgo.SFSerialPort, opt *mkpgo.AGetOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return AUploadToMKPContext(context.Background(), sfport, opt, opts...)
+}
+
+// AUploadToMKPContext uploads a file-server file to the corresponding MKP path using aget directive with context.
+// AUploadToMKPContext 使用 aget 指令和 context 将文件服务器中的文件下载/上传到 MKP 对应路径。
+func AUploadToMKPContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.AGetOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	if !sfport.SyncOuputEnabled {
+		return "", errors.New("please enable sync mode first")
+	}
+	if opt == nil || opt.FilePath == "" {
+		return "", errors.New("aget file path is required")
+	}
+
+	directive := "aget " + strings.Join(opt.CliArgs(), " ")
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		return parser.Parse(directive, result)
+	}
+
+	return "", mkpgo.ErrDirectiveParserMissing
+}
+
+// ADownloadFromMKP downloads/uploads a MKP file to the corresponding file-server path using aput directive.
+// ADownloadFromMKP 使用 aput 指令将 MKP 文件下载/上传到文件服务器对应路径。
+func ADownloadFromMKP(sfport *mkpgo.SFSerialPort, opt *mkpgo.APutOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return ADownloadFromMKPContext(context.Background(), sfport, opt, opts...)
+}
+
+// ADownloadFromMKPContext downloads/uploads a MKP file to the corresponding file-server path using aput directive with context.
+// ADownloadFromMKPContext 使用 aput 指令和 context 将 MKP 文件下载/上传到文件服务器对应路径。
+func ADownloadFromMKPContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.APutOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	if !sfport.SyncOuputEnabled {
+		return "", errors.New("please enable sync mode first")
+	}
+	if opt == nil || opt.FilePath == "" {
+		return "", errors.New("aput file path is required")
+	}
+
+	directive := "aput " + strings.Join(opt.CliArgs(), " ")
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		return parser.Parse(directive, result)
+	}
+
+	return "", mkpgo.ErrDirectiveParserMissing
+}
+
 // AHTTPBase inspects or sets file-management API endpoint base URL using ahttpbase directive.
 // AHTTPBase 使用 ahttpbase 指令查看或设置文件管理服务器 API endpoint base URL。
 func AHTTPBase(sfport *mkpgo.SFSerialPort, opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error) {

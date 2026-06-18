@@ -35,6 +35,8 @@ var (
 	_ RawDirectiveOutputParser = (*RawDirective_wifi_auto)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_adumj)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_ahttpbase)(nil)
+	_ RawDirectiveOutputParser = (*RawDirective_aget)(nil)
+	_ RawDirectiveOutputParser = (*RawDirective_aput)(nil)
 
 	// Built-in singleton parser instances.
 	// 内置解析器单例实例。
@@ -53,6 +55,8 @@ var (
 	InstantRawDirective_wifi_auto   = NewRawDirective_wifi_auto()
 	InstantRawDirective_adumj       = NewRawDirective_adumj()
 	InstantRawDirective_ahttpbase   = NewRawDirective_ahttpbase()
+	InstantRawDirective_aget        = NewRawDirective_aget()
+	InstantRawDirective_aput        = NewRawDirective_aput()
 )
 
 // InitParsers registers built-in directive output parsers.
@@ -74,6 +78,8 @@ func InitParsers() {
 		InstantRawDirective_wifi_auto,
 		InstantRawDirective_adumj,
 		InstantRawDirective_ahttpbase,
+		InstantRawDirective_aget,
+		InstantRawDirective_aput,
 	}
 
 	for _, parser := range parsers {
@@ -721,6 +727,111 @@ func (r *RawDirective_adumj) Parse(cli, data string) (string, error) {
 	}
 	if data == "" {
 		return "", nil
+	}
+
+	return data, ErrRawDirectiveParseFailed
+}
+
+// RawDirective_aget parses aget output (download from file server into MKP storage).
+// RawDirective_aget 解析 aget 指令输出（从文件服务器下载到 MKP 存储）。
+type RawDirective_aget struct {
+	*RawDirective
+	Name string
+}
+
+// NewRawDirective_aget creates aget parser.
+// NewRawDirective_aget 创建 aget 解析器。
+func NewRawDirective_aget() *RawDirective_aget {
+	return &RawDirective_aget{Name: "aget", RawDirective: &RawDirective{JSONOutput: false}}
+}
+
+// String returns directive name.
+// String 返回对应指令名。
+func (r *RawDirective_aget) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_aget) EOFFlag() string {
+	return EOFCLI
+}
+
+// Parse parses aget raw output.
+// Parse 解析 aget 原始输出。
+func (r *RawDirective_aget) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+	data = strings.TrimSpace(data)
+	data = strings.TrimSuffix(data, EOFCLI)
+	data = strings.TrimSpace(data)
+
+	lower := strings.ToLower(data)
+	if strings.Contains(lower, "error code") || strings.Contains(lower, "server returned status") {
+		return "", ErrRawDirecitveExecutionFailed
+	}
+	if strings.Contains(data, "GET status=200") {
+		return "OK", nil
+	}
+	if strings.Contains(data, "GET status=") {
+		return "", ErrRawDirecitveExecutionFailed
+	}
+	if data == "" {
+		return "", ErrRawDirectiveParseFailed
+	}
+
+	return data, ErrRawDirectiveParseFailed
+}
+
+// RawDirective_aput parses aput output (upload from MKP storage to file server).
+// RawDirective_aput 解析 aput 指令输出（从 MKP 存储上传到文件服务器）。
+type RawDirective_aput struct {
+	*RawDirective
+	Name string
+}
+
+// NewRawDirective_aput creates aput parser.
+// NewRawDirective_aput 创建 aput 解析器。
+func NewRawDirective_aput() *RawDirective_aput {
+	return &RawDirective_aput{Name: "aput", RawDirective: &RawDirective{JSONOutput: false}}
+}
+
+// String returns directive name.
+// String 返回对应指令名。
+func (r *RawDirective_aput) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_aput) EOFFlag() string {
+	return EOFCLI
+}
+
+// Parse parses aput raw output.
+// Parse 解析 aput 原始输出。
+func (r *RawDirective_aput) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+	data = strings.TrimSpace(data)
+	data = strings.TrimSuffix(data, EOFCLI)
+	data = strings.TrimSpace(data)
+
+	lower := strings.ToLower(data)
+	if strings.Contains(lower, "upload failed") || strings.Contains(lower, "failed to open file") || strings.Contains(lower, "error code") {
+		return "", ErrRawDirecitveExecutionFailed
+	}
+	if strings.Contains(data, "Upload OK") {
+		return "OK", nil
+	}
+	if data == "" {
+		return "", ErrRawDirectiveParseFailed
 	}
 
 	return data, ErrRawDirectiveParseFailed

@@ -62,6 +62,8 @@ fmt.Println(sn, err)
 | `wifi_auto` | `wifi_auto [0|1]` | 查看或设置 Wi-Fi 自动连接状态 | `helper.WifiAuto` / `Controller.WifiAuto` | 文本，解析器 `RawDirective_wifi_auto`；查询返回 `on` / `off` |
 | `adumj` | `adumj <logPath>` | 将日志文件转为便于解读的 JSON | `helper.Adumj` / `Controller.Adumj` | JSON -> `ActionDump`；EOF 为 `cli>`，成功内容包含 `<EOF>` |
 | `ahttpbase` | `ahttpbase [url]` | 查看或设置文件管理服务器 API endpoint base URL | `helper.AHTTPBase` / `Controller.AHTTPBase` | JSON -> `AHTTPBase`；EOF 为 `cli>` |
+| `aget` | `aget <filepath>` | 从 file server 下载指定文件到 MKP 对应路径 | `helper.AUploadToMKP` / `Controller.AUploadToMKP` | 文本；成功包含 `GET status=200` |
+| `aput` | `aput <filepath>` | 从 MKP 下载/上传指定文件到 file server 对应路径 | `helper.ADownloadFromMKP` / `Controller.ADownloadFromMKP` | 文本；成功包含 `Upload OK` |
 | `alive` | `alive` | 心跳/存活检测 | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | 获取日志时长 | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | 获取版本信息 | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -520,6 +522,132 @@ Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
 
+### `aget`：从 file server 上传到 MKP
+
+> 使用前需通过 `ahttpbase` 正确设置文件管理服务器 API endpoint base URL。
+
+**CLI：**
+
+```text
+aget <filepath>
+```
+
+例如将 file server 下 `{FILE_ROOT}/applog/path_to.log` 下载/上传为 MKP 中的 `/eMMC/applog/path_to.log`：
+
+```text
+aget applog/path_to.log
+```
+
+**Go API：**
+
+```go
+output, err := helper.AUploadToMKP(sfport, &mkpgo.AGetOption{FilePath: "applog/path_to.log"})
+fmt.Println(output)
+```
+
+`Controller` 代理：
+
+```go
+output, err := ctrl.AUploadToMKP(&mkpgo.AGetOption{FilePath: "applog/path_to.log"})
+```
+
+**解析器：** `RawDirective_aget`
+
+- 输出类型：非 JSON。
+- 结束标记：`cli>`。
+- 成功判断：输出包含 `GET status=200`。
+- 失败判断：输出包含 `GET status=` 但不是 `GET status=200`，或包含 `Server returned status` / `Command returned non-zero error code` 时返回 `ErrRawDirecitveExecutionFailed`。
+
+成功输出示例：
+
+```text
+aget applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log
+Downloading http://192.168.71.6:8000/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log
+
+I (2925224) heh: HTTP_EVENT_ON_CONNECTED
+I (2925424) heh: HTTP_EVENT_ON_DATA, len=75
+I (2925424) heh: HTTP_EVENT_ON_FINISH
+I (2925424) httpfile: GET status=200, length=75
+Saved to /eMMC/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log (75 bytes)
+
+I (2925448) heh: HTTP_EVENT_DISCONNECTED
+cli>
+```
+
+失败输出示例：
+
+```text
+aget applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c1.log
+Downloading http://192.168.71.6:8000/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c1.log
+
+I (2970784) heh: HTTP_EVENT_ON_CONNECTED
+I (2970792) heh: HTTP_EVENT_ON_DATA, len=76
+I (2970792) heh: HTTP_EVENT_ON_FINISH
+I (2970792) httpfile: GET status=404, length=76
+E (2970792) httpfile: Server returned status 404
+I (2970816) heh: HTTP_EVENT_DISCONNECTED
+cli>
+```
+### `aput`：从 MKP 下载到 file server
+
+> 使用前需通过 `ahttpbase` 正确设置文件管理服务器 API endpoint base URL。
+
+**CLI：**
+
+```text
+aput <filepath>
+```
+
+例如将 MKP 中的 `/eMMC/applog/path_to.log` 下载/上传到 file server 下 `{FILE_ROOT}/applog/path_to.log`：
+
+```text
+aput applog/path_to.log
+```
+
+**Go API：**
+
+```go
+output, err := helper.ADownloadFromMKP(sfport, &mkpgo.APutOption{FilePath: "applog/path_to.log"})
+fmt.Println(output)
+```
+
+`Controller` 代理：
+
+```go
+output, err := ctrl.ADownloadFromMKP(&mkpgo.APutOption{FilePath: "applog/path_to.log"})
+```
+
+**解析器：** `RawDirective_aput`
+
+- 输出类型：非 JSON。
+- 结束标记：`cli>`。
+- 成功判断：输出包含 `Upload OK`。
+- 失败判断：输出包含 `Upload FAILED` / `Failed to open file` / `Command returned non-zero error code` 时返回 `ErrRawDirecitveExecutionFailed`。
+
+成功输出示例：
+
+```text
+aput applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log
+Uploading /eMMC/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log -> http://192.168.71.6:8000/upload
+
+I (297931) httpfile: Upload OK (75 bytes) -> http://192.168.71.6:8000/upload
+Upload OK
+
+cli>
+```
+
+失败输出示例：
+
+```text
+aput applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c111.log
+Uploading /eMMC/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c111.log -> http://192.168.71.6:8000/upload
+
+E (345995) httpfile: Failed to open file: /eMMC/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c111.log
+Upload FAILED
+
+Command returned non-zero error code: 0xffffffff (ESP_FAIL)
+cli>
+```
 ### `ahttpbase`：文件管理服务器 API endpoint base URL
 
 **CLI：**
@@ -867,6 +995,8 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `wifi_auto` | `RawDirective_wifi_auto` | 否 | `cli>` | 文本；查询返回 `on` / `off`；设置成功返回空字符串。 |
 | `adumj` | `RawDirective_adumj` | 是 | `cli>` | 提取 JSON 文本 -> `ActionDump`；成功输出中的 `<EOF>` 作为内容被解析器剔除。 |
 | `ahttpbase` | `RawDirective_ahttpbase` | 是 | `cli>` | 查询时提取 JSON -> `AHTTPBase`；设置成功 `OK` 时合成 JSON。 |
+| `aget` | `RawDirective_aget` | 否 | `cli>` | 文本；成功包含 `GET status=200`；非 200 状态返回执行失败。 |
+| `aput` | `RawDirective_aput` | 否 | `cli>` | 文本；成功包含 `Upload OK`；失败输出返回执行失败。 |
 | `alive` | `RawDirective_alive` | 是 | `<EOF>` | JSON 文本 -> `Heartbeat`。 |
 | `atime` | `RawDirective_atime` | 是 | `<EOF>` | 查找包含 `"seconds"` 的 JSON 行 -> `LogLength`。 |
 | `aversion` | `RawDirective_aversion` | 是 | `<EOF>` | JSON 文本 -> `MKPVersion`。 |
@@ -930,6 +1060,14 @@ type WifiAutoOption struct {
     State string `json:"state"`
 }
 
+type AGetOption struct {
+    FilePath string `json:"filepath"`
+}
+
+type APutOption struct {
+    FilePath string `json:"filepath"`
+}
+
 type AHTTPBaseOption struct {
     URL string `json:"url"`
 }
@@ -982,7 +1120,7 @@ type LogInfo struct {
 
 ### `helper` 包方法
 
-需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`AHTTPBase`、`Adumj`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
+需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`AUploadToMKP`、`ADownloadFromMKP`、`AHTTPBase`、`Adumj`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
 
 | 方法 | 对应指令 | 返回 |
 |---|---|---|
@@ -997,6 +1135,8 @@ type LogInfo struct {
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
 | `Join` / `JoinContext` | `join` | `string, error` |
 | `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
+| `AUploadToMKP` / `AUploadToMKPContext` | `aget` | `string, error` |
+| `ADownloadFromMKP` / `ADownloadFromMKPContext` | `aput` | `string, error` |
 | `AHTTPBase` / `AHTTPBaseContext` | `ahttpbase` | `*AHTTPBase, error` |
 | `Adumj` / `AdumjContext` | `adumj` | `*ActionDump, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
@@ -1019,7 +1159,7 @@ type LogInfo struct {
 `controller.Controller` 封装了 helper 和键鼠高级操作：
 
 - 录制/回放：`StartRecord`、`StopRecord`、`Alog`、`Astop`、`Cancel`
-- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`AHTTPBase`、`Adumj`、`Alive`、`Atime`、`Aversion`、`AInspect`
+- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`AUploadToMKP`、`ADownloadFromMKP`、`AHTTPBase`、`Adumj`、`Alive`、`Atime`、`Aversion`、`AInspect`
 - 键盘：`KeyDown`、`KeyUp`、`KeyTap`、`KeyPresses`、`KeypadRelease`、`KeypadReleaseAll`
 - 鼠标：`MouseClick`、`MouseClickWithOption`、`MouseScroll`、`MouseScrollWithOption`、`MouseScrollWithButton`、`MouseDown`、`MouseReleaseAll`、`MouseUp`、`M10Move`、`MouseMove`
 

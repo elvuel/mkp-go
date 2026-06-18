@@ -62,6 +62,8 @@ fmt.Println(sn, err)
 | `wifi_auto` | `wifi_auto [0|1]` | Inspect or set Wi-Fi auto-connect state | `helper.WifiAuto` / `Controller.WifiAuto` | Text parser `RawDirective_wifi_auto`; query returns `on` / `off` |
 | `adumj` | `adumj <logPath>` | Dump a log file as readable JSON | `helper.Adumj` / `Controller.Adumj` | JSON -> `ActionDump`; EOF is `cli>`; successful output contains `<EOF>` |
 | `ahttpbase` | `ahttpbase [url]` | Inspect or set file-management API endpoint base URL | `helper.AHTTPBase` / `Controller.AHTTPBase` | JSON -> `AHTTPBase`; EOF is `cli>` |
+| `aget` | `aget <filepath>` | Download a file-server file to the corresponding MKP path | `helper.AUploadToMKP` / `Controller.AUploadToMKP` | Text; success contains `GET status=200` |
+| `aput` | `aput <filepath>` | Download/upload a MKP file to the corresponding file-server path | `helper.ADownloadFromMKP` / `Controller.ADownloadFromMKP` | Text; success contains `Upload OK` |
 | `alive` | `alive` | Heartbeat / liveness check | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | Get log duration | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | Get firmware/application version | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -520,6 +522,132 @@ Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
 
+### `aget`: upload from file server to MKP
+
+> `ahttpbase` must be configured correctly before using this command.
+
+**CLI:**
+
+```text
+aget <filepath>
+```
+
+For example, download/upload `{FILE_ROOT}/applog/path_to.log` from the file server to `/eMMC/applog/path_to.log` on MKP:
+
+```text
+aget applog/path_to.log
+```
+
+**Go API:**
+
+```go
+output, err := helper.AUploadToMKP(sfport, &mkpgo.AGetOption{FilePath: "applog/path_to.log"})
+fmt.Println(output)
+```
+
+`Controller` proxy:
+
+```go
+output, err := ctrl.AUploadToMKP(&mkpgo.AGetOption{FilePath: "applog/path_to.log"})
+```
+
+**Parser:** `RawDirective_aget`
+
+- Output type: non-JSON.
+- EOF marker: `cli>`.
+- Success detection: output contains `GET status=200`.
+- Failure detection: output contains `GET status=` but not `GET status=200`, or contains `Server returned status` / `Command returned non-zero error code`; parser returns `ErrRawDirecitveExecutionFailed`.
+
+Success output example:
+
+```text
+aget applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log
+Downloading http://192.168.71.6:8000/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log
+
+I (2925224) heh: HTTP_EVENT_ON_CONNECTED
+I (2925424) heh: HTTP_EVENT_ON_DATA, len=75
+I (2925424) heh: HTTP_EVENT_ON_FINISH
+I (2925424) httpfile: GET status=200, length=75
+Saved to /eMMC/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log (75 bytes)
+
+I (2925448) heh: HTTP_EVENT_DISCONNECTED
+cli>
+```
+
+Failure output example:
+
+```text
+aget applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c1.log
+Downloading http://192.168.71.6:8000/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c1.log
+
+I (2970784) heh: HTTP_EVENT_ON_CONNECTED
+I (2970792) heh: HTTP_EVENT_ON_DATA, len=76
+I (2970792) heh: HTTP_EVENT_ON_FINISH
+I (2970792) httpfile: GET status=404, length=76
+E (2970792) httpfile: Server returned status 404
+I (2970816) heh: HTTP_EVENT_DISCONNECTED
+cli>
+```
+### `aput`: download from MKP to file server
+
+> `ahttpbase` must be configured correctly before using this command.
+
+**CLI:**
+
+```text
+aput <filepath>
+```
+
+For example, download/upload `/eMMC/applog/path_to.log` on MKP to `{FILE_ROOT}/applog/path_to.log` on the file server:
+
+```text
+aput applog/path_to.log
+```
+
+**Go API:**
+
+```go
+output, err := helper.ADownloadFromMKP(sfport, &mkpgo.APutOption{FilePath: "applog/path_to.log"})
+fmt.Println(output)
+```
+
+`Controller` proxy:
+
+```go
+output, err := ctrl.ADownloadFromMKP(&mkpgo.APutOption{FilePath: "applog/path_to.log"})
+```
+
+**Parser:** `RawDirective_aput`
+
+- Output type: non-JSON.
+- EOF marker: `cli>`.
+- Success detection: output contains `Upload OK`.
+- Failure detection: output contains `Upload FAILED` / `Failed to open file` / `Command returned non-zero error code`; parser returns `ErrRawDirecitveExecutionFailed`.
+
+Success output example:
+
+```text
+aput applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log
+Uploading /eMMC/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c.log -> http://192.168.71.6:8000/upload
+
+I (297931) httpfile: Upload OK (75 bytes) -> http://192.168.71.6:8000/upload
+Upload OK
+
+cli>
+```
+
+Failure output example:
+
+```text
+aput applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c111.log
+Uploading /eMMC/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c111.log -> http://192.168.71.6:8000/upload
+
+E (345995) httpfile: Failed to open file: /eMMC/applog/d6314ae1-728c-4fba-aaaa-3c4729c2e32c111.log
+Upload FAILED
+
+Command returned non-zero error code: 0xffffffff (ESP_FAIL)
+cli>
+```
 ### `ahttpbase`: file-management API endpoint base URL
 
 **CLI:**
@@ -867,6 +995,8 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `wifi_auto` | `RawDirective_wifi_auto` | No | `cli>` | Text; query returns `on` / `off`; successful set returns an empty string. |
 | `adumj` | `RawDirective_adumj` | Yes | `cli>` | Extracts JSON text -> `ActionDump`; the `<EOF>` line in successful output is stripped as content. |
 | `ahttpbase` | `RawDirective_ahttpbase` | Yes | `cli>` | Query extracts JSON -> `AHTTPBase`; successful set `OK` is synthesized as JSON. |
+| `aget` | `RawDirective_aget` | No | `cli>` | Text; success contains `GET status=200`; non-200 status returns execution failure. |
+| `aput` | `RawDirective_aput` | No | `cli>` | Text; success contains `Upload OK`; failure output returns execution failure. |
 | `alive` | `RawDirective_alive` | Yes | `<EOF>` | JSON text -> `Heartbeat`. |
 | `atime` | `RawDirective_atime` | Yes | `<EOF>` | Finds a JSON line containing `"seconds"` -> `LogLength`. |
 | `aversion` | `RawDirective_aversion` | Yes | `<EOF>` | JSON text -> `MKPVersion`. |
@@ -930,6 +1060,14 @@ type WifiAutoOption struct {
     State string `json:"state"`
 }
 
+type AGetOption struct {
+    FilePath string `json:"filepath"`
+}
+
+type APutOption struct {
+    FilePath string `json:"filepath"`
+}
+
 type AHTTPBaseOption struct {
     URL string `json:"url"`
 }
@@ -982,7 +1120,7 @@ type LogInfo struct {
 
 ### `helper` package methods
 
-Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AHTTPBase`, `Adumj`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
+Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AUploadToMKP`, `ADownloadFromMKP`, `AHTTPBase`, `Adumj`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
 
 | Method | Command | Return |
 |---|---|---|
@@ -997,6 +1135,8 @@ Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AHTTPBase`, `A
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
 | `Join` / `JoinContext` | `join` | `string, error` |
 | `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
+| `AUploadToMKP` / `AUploadToMKPContext` | `aget` | `string, error` |
+| `ADownloadFromMKP` / `ADownloadFromMKPContext` | `aput` | `string, error` |
 | `AHTTPBase` / `AHTTPBaseContext` | `ahttpbase` | `*AHTTPBase, error` |
 | `Adumj` / `AdumjContext` | `adumj` | `*ActionDump, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
@@ -1019,7 +1159,7 @@ Matching sync-output proxy methods on `Controller` also accept optional `mkpgo.D
 `controller.Controller` wraps helper functions and higher-level keyboard/mouse operations:
 
 - Recording/replay: `StartRecord`, `StopRecord`, `Alog`, `Astop`, `Cancel`
-- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `AHTTPBase`, `Adumj`, `Alive`, `Atime`, `Aversion`, `AInspect`
+- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `AUploadToMKP`, `ADownloadFromMKP`, `AHTTPBase`, `Adumj`, `Alive`, `Atime`, `Aversion`, `AInspect`
 - Keyboard: `KeyDown`, `KeyUp`, `KeyTap`, `KeyPresses`, `KeypadRelease`, `KeypadReleaseAll`
 - Mouse: `MouseClick`, `MouseClickWithOption`, `MouseScroll`, `MouseScrollWithOption`, `MouseScrollWithButton`, `MouseDown`, `MouseReleaseAll`, `MouseUp`, `M10Move`, `MouseMove`
 

@@ -107,6 +107,36 @@ func (opt *WifiAutoOption) CliArgs() []string {
 	return []string{opt.State}
 }
 
+// AGetOption defines arguments for aget command.
+// AGetOption 定义 aget 命令参数。
+type AGetOption struct {
+	FilePath string `json:"filepath"` // File path under file server root.
+}
+
+// CliArgs converts aget options to CLI argument list.
+// CliArgs 将 aget 参数转换为命令行参数数组。
+func (opt *AGetOption) CliArgs() []string {
+	if opt == nil || opt.FilePath == "" {
+		return nil
+	}
+	return []string{opt.FilePath}
+}
+
+// APutOption defines arguments for aput command.
+// APutOption 定义 aput 命令参数。
+type APutOption struct {
+	FilePath string `json:"filepath"` // File path under MKP /eMMC root.
+}
+
+// CliArgs converts aput options to CLI argument list.
+// CliArgs 将 aput 参数转换为命令行参数数组。
+func (opt *APutOption) CliArgs() []string {
+	if opt == nil || opt.FilePath == "" {
+		return nil
+	}
+	return []string{opt.FilePath}
+}
+
 // AHTTPBaseOption defines optional argument for ahttpbase command.
 // AHTTPBaseOption 定义 ahttpbase 命令的可选参数。
 type AHTTPBaseOption struct {
