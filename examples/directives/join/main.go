@@ -27,9 +27,7 @@ func main() {
 		log.Fatalf("usage: %s [ssid password]", os.Args[0])
 	}
 
-	c.SFPort.SyncOutputTimeout = 5 * time.Second
-
-	output, err := helper.JoinContext(context.Background(), c.SFPort, opt)
+	output, err := helper.JoinContext(context.Background(), c.SFPort, opt, mkpgo.WithSyncOutputTimeout(30*time.Second))
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -72,8 +72,8 @@ fmt.Println(sn, err)
 
 | API | 行为 |
 |---|---|
-| `SendDirective(directive)` / `SendDirectiveContext(ctx, directive)` | 同步发送；若 `SyncOuputEnabled=true`，等待 `Read()` 捕获到该指令的结束标记并返回原始输出。 |
-| `SendDirectiveIgnoreOutput(directive)` / `SendDirectiveIgnoreOutputContext(ctx, directive)` | 同步发送，但只等待完成标记，不返回输出内容；适合 `m10` / `kpad` 这类只关心完成的指令。 |
+| `SendDirective(directive[, opts...])` / `SendDirectiveContext(ctx, directive[, opts...])` / `SendSyncDirective(...)` | 同步发送；若 `SyncOuputEnabled=true`，等待 `Read()` 捕获到该指令的结束标记并返回原始输出；可选 `DirectiveOption` 覆盖本次等待设置。 |
+| `SendDirectiveIgnoreOutput(directive[, opts...])` / `SendDirectiveIgnoreOutputContext(ctx, directive[, opts...])` | 同步发送，但只等待完成标记，不返回输出内容；可选 `DirectiveOption` 覆盖本次等待设置。 |
 | `SendDirectiveAsync(directive)` / `SendDirectiveAsyncContext(ctx, directive)` | 异步发送；不等待输出。 |
 
 ### 结束标记
@@ -84,6 +84,18 @@ fmt.Println(sn, err)
   - `EOFDefault = "<EOF>"`
   - `EOFCLI = "cli>"`
 - `alog` 的同步匹配会被规范化为 `alog`，因为实际输出不一定以完整 CLI 文本开头。
+
+### 同步输出超时
+
+- 默认超时由 `SFSerialPort.SyncOutputTimeout` 控制，`NewSFSerialPort()` 默认是 `10 * time.Second`。
+- `SendDirective` / `SendDirectiveContext` / `SendSyncDirective` / `SendSyncDirectiveContext` 支持传入可选 `DirectiveOption`，例如 `WithSyncOutputTimeout(timeout)` 只覆盖本次同步等待。
+- 未传入 `WithSyncOutputTimeout` 时，使用默认 `SyncOutputTimeout`。
+- `WithSyncOutputTimeout(0)` 表示本次不启用定时器，仅由 `context` 取消结束等待。
+
+```go
+out, err := sfport.SendSyncDirective("join ssid password", mkpgo.WithSyncOutputTimeout(30*time.Second))
+out, err = sfport.SendDirectiveContext(ctx, "alive") // 使用默认 SyncOutputTimeout
+```
 
 ### 常见建议
 
@@ -747,8 +759,8 @@ type LogInfo struct {
 
 | 方法 | 对应指令 | 说明 |
 |---|---|---|
-| `SendDirective` / `SendDirectiveContext` | 任意 | 同步发送并返回原始输出。 |
-| `SendDirectiveIgnoreOutput` / `SendDirectiveIgnoreOutputContext` | 任意 | 同步发送，等待完成但忽略输出。 |
+| `SendDirective` / `SendDirectiveContext` / `SendSyncDirective` / `SendSyncDirectiveContext` | 任意 | 同步发送并返回原始输出；可选 `DirectiveOption` 覆盖本次同步等待。 |
+| `SendDirectiveIgnoreOutput` / `SendDirectiveIgnoreOutputContext` | 任意 | 同步发送，等待完成但忽略输出；可选 `DirectiveOption` 覆盖本次同步等待。 |
 | `SendDirectiveAsync` / `SendDirectiveAsyncContext` | 任意 | 异步发送。 |
 | `StartRecording` / `StartRecordingContext` | `alog` | 异步开始录制。 |
 | `StartReplaying` / `StartReplayingContext` | `aplay` | 异步开始回放。 |
@@ -760,6 +772,8 @@ type LogInfo struct {
 | `Keypad` / `KeypadContext` | `kpad` | 发送键盘指令；`Async=false` 时同步忽略输出。 |
 
 ### `helper` 包方法
+
+需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
 
 | 方法 | 对应指令 | 返回 |
 |---|---|---|
@@ -787,6 +801,8 @@ type LogInfo struct {
 | `M10` | `m10` | `error` |
 
 ### `controller.Controller` 常用代理
+
+`Controller` 中对应的同步输出代理方法同样支持可选 `mkpgo.DirectiveOption`。
 
 `controller.Controller` 封装了 helper 和键鼠高级操作：
 

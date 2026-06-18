@@ -19,6 +19,34 @@ type SFSerialPort = SerialPort
 // ErrSyncOutputTimeout 表示等待同步输出超时。
 var ErrSyncOutputTimeout = errors.New("timeout waiting for sync output")
 
+// DirectiveOption customizes one synchronous directive send.
+// DirectiveOption 用于定制单次同步指令发送。
+type DirectiveOption func(*DirectiveOptions)
+
+// DirectiveOptions contains optional settings for one directive send.
+// DirectiveOptions 包含单次指令发送的可选设置。
+type DirectiveOptions struct {
+	SyncOutputTimeout *time.Duration
+}
+
+// WithSyncOutputTimeout overrides SyncOutputTimeout for one synchronous directive wait.
+// WithSyncOutputTimeout 覆盖单次同步指令等待的 SyncOutputTimeout。
+func WithSyncOutputTimeout(timeout time.Duration) DirectiveOption {
+	return func(opt *DirectiveOptions) {
+		opt.SyncOutputTimeout = &timeout
+	}
+}
+
+func applyDirectiveOptions(opts ...DirectiveOption) DirectiveOptions {
+	var cfg DirectiveOptions
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+	return cfg
+}
+
 // NewSFSerialPort creates a SerialPort with default SF-device settings.
 // NewSFSerialPort 创建带默认 SF 设备参数的串口实例。
 func NewSFSerialPort() *SFSerialPort {
@@ -41,34 +69,48 @@ func NewSFSerialPort() *SFSerialPort {
 }
 
 // SendDirective sends a directive and optionally waits for sync output.
-// SendDirective 发送指令；在同步模式下等待并返回解析前原始输出。
-func (sp *SFSerialPort) SendDirective(directive string) (string, error) {
-	return sp.SendDirectiveContext(context.Background(), directive)
+// SendDirective 发送指令；在同步模式下等待并返回解析前原始输出；可通过 DirectiveOption 覆盖本次同步等待设置。
+func (sp *SFSerialPort) SendDirective(directive string, opts ...DirectiveOption) (string, error) {
+	return sp.SendDirectiveContext(context.Background(), directive, opts...)
 }
 
 // SendDirectiveContext sends a directive and optionally waits for sync output.
-// SendDirectiveContext 发送指令；支持通过 context 取消等待过程。
-func (sp *SFSerialPort) SendDirectiveContext(ctx context.Context, directive string) (string, error) {
-	return sp.sendDirectiveContext(ctx, directive, false)
+// SendDirectiveContext 发送指令；支持通过 context 取消等待过程；可通过 DirectiveOption 覆盖本次同步等待设置。
+func (sp *SFSerialPort) SendDirectiveContext(ctx context.Context, directive string, opts ...DirectiveOption) (string, error) {
+	return sp.sendDirectiveContext(ctx, directive, false, opts...)
+}
+
+// SendSyncDirective is an explicit alias of SendDirective.
+// SendSyncDirective 是 SendDirective 的显式同步发送别名；可通过 DirectiveOption 覆盖本次同步等待设置。
+func (sp *SFSerialPort) SendSyncDirective(directive string, opts ...DirectiveOption) (string, error) {
+	return sp.SendDirective(directive, opts...)
+}
+
+// SendSyncDirectiveContext is an explicit alias of SendDirectiveContext.
+// SendSyncDirectiveContext 是 SendDirectiveContext 的显式同步发送别名；可通过 DirectiveOption 覆盖本次同步等待设置。
+func (sp *SFSerialPort) SendSyncDirectiveContext(ctx context.Context, directive string, opts ...DirectiveOption) (string, error) {
+	return sp.SendDirectiveContext(ctx, directive, opts...)
 }
 
 // SendDirectiveIgnoreOutput sends a directive synchronously and discards its output.
-// SendDirectiveIgnoreOutput 同步发送指令，但 Read 只等待完成标记并忽略输出内容。
-func (sp *SFSerialPort) SendDirectiveIgnoreOutput(directive string) error {
-	return sp.SendDirectiveIgnoreOutputContext(context.Background(), directive)
+// SendDirectiveIgnoreOutput 同步发送指令，但 Read 只等待完成标记并忽略输出内容；可通过 DirectiveOption 覆盖本次同步等待设置。
+func (sp *SFSerialPort) SendDirectiveIgnoreOutput(directive string, opts ...DirectiveOption) error {
+	return sp.SendDirectiveIgnoreOutputContext(context.Background(), directive, opts...)
 }
 
 // SendDirectiveIgnoreOutputContext sends a directive synchronously and discards its output.
-// SendDirectiveIgnoreOutputContext 同步发送指令并忽略输出，支持通过 context 取消等待过程。
-func (sp *SFSerialPort) SendDirectiveIgnoreOutputContext(ctx context.Context, directive string) error {
-	_, err := sp.sendDirectiveContext(ctx, directive, true)
+// SendDirectiveIgnoreOutputContext 同步发送指令并忽略输出，支持通过 context 取消等待过程；可通过 DirectiveOption 覆盖本次同步等待设置。
+func (sp *SFSerialPort) SendDirectiveIgnoreOutputContext(ctx context.Context, directive string, opts ...DirectiveOption) error {
+	_, err := sp.sendDirectiveContext(ctx, directive, true, opts...)
 	return err
 }
 
-func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive string, ignoreOutput bool) (string, error) {
+func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive string, ignoreOutput bool, opts ...DirectiveOption) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+
+	cfg := applyDirectiveOptions(opts...)
 
 	sp.locker.Lock()
 
@@ -97,7 +139,7 @@ func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive stri
 		}
 
 		sp.locker.Unlock()
-		return sp.GetSyncOutputContext(ctx)
+		return sp.getSyncOutputContext(ctx, sp.resolveDirectiveSyncOutputTimeout(cfg))
 	}
 
 	_, err := sp.Write([]byte(directive + "\r\n"))
@@ -159,8 +201,19 @@ func (sp *SFSerialPort) GetSyncOutput() (string, error) {
 // GetSyncOutputContext waits for one sync output with timeout and context cancellation.
 // GetSyncOutputContext 按配置等待同步输出，支持 context 取消。
 func (sp *SFSerialPort) GetSyncOutputContext(ctx context.Context) (string, error) {
-	if sp.SyncOutputTimeout > 0 {
-		timer := time.NewTimer(sp.SyncOutputTimeout)
+	return sp.getSyncOutputContext(ctx, sp.SyncOutputTimeout)
+}
+
+func (sp *SFSerialPort) resolveDirectiveSyncOutputTimeout(opt DirectiveOptions) time.Duration {
+	if opt.SyncOutputTimeout != nil {
+		return *opt.SyncOutputTimeout
+	}
+	return sp.SyncOutputTimeout
+}
+
+func (sp *SFSerialPort) getSyncOutputContext(ctx context.Context, timeout time.Duration) (string, error) {
+	if timeout > 0 {
+		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 
 		select {

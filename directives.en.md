@@ -72,8 +72,8 @@ fmt.Println(sn, err)
 
 | API | Behavior |
 |---|---|
-| `SendDirective(directive)` / `SendDirectiveContext(ctx, directive)` | Synchronous send. If `SyncOuputEnabled=true`, it waits until `Read()` captures the command completion marker and returns raw output. |
-| `SendDirectiveIgnoreOutput(directive)` / `SendDirectiveIgnoreOutputContext(ctx, directive)` | Synchronous send, but only waits for completion and returns no output. Useful for commands such as `m10` and `kpad`. |
+| `SendDirective(directive[, opts...])` / `SendDirectiveContext(ctx, directive[, opts...])` / `SendSyncDirective(...)` | Synchronous send. If `SyncOuputEnabled=true`, it waits until `Read()` captures the command completion marker and returns raw output; optional `DirectiveOption` values override this wait. |
+| `SendDirectiveIgnoreOutput(directive[, opts...])` / `SendDirectiveIgnoreOutputContext(ctx, directive[, opts...])` | Synchronous send, but only waits for completion and returns no output; optional `DirectiveOption` values override this wait. |
 | `SendDirectiveAsync(directive)` / `SendDirectiveAsyncContext(ctx, directive)` | Asynchronous send. It writes the command and does not wait for output. |
 
 ### EOF markers
@@ -84,6 +84,18 @@ fmt.Println(sn, err)
   - `EOFDefault = "<EOF>"`
   - `EOFCLI = "cli>"`
 - `alog` synchronous matching is normalized to `alog`, because actual output may not start with the full CLI text.
+
+### Sync output timeout
+
+- The default timeout is controlled by `SFSerialPort.SyncOutputTimeout`; `NewSFSerialPort()` defaults it to `10 * time.Second`.
+- `SendDirective` / `SendDirectiveContext` / `SendSyncDirective` / `SendSyncDirectiveContext` accept optional `DirectiveOption` values, such as `WithSyncOutputTimeout(timeout)`, that only override the current synchronous wait.
+- If `WithSyncOutputTimeout` is omitted, the default `SyncOutputTimeout` is used.
+- `WithSyncOutputTimeout(0)` disables the timer for this wait, so only `context` cancellation can stop it.
+
+```go
+out, err := sfport.SendSyncDirective("join ssid password", mkpgo.WithSyncOutputTimeout(30*time.Second))
+out, err = sfport.SendDirectiveContext(ctx, "alive") // uses default SyncOutputTimeout
+```
 
 ### Recommendations
 
@@ -747,8 +759,8 @@ type LogInfo struct {
 
 | Method | Command | Description |
 |---|---|---|
-| `SendDirective` / `SendDirectiveContext` | Any | Synchronously send and return raw output. |
-| `SendDirectiveIgnoreOutput` / `SendDirectiveIgnoreOutputContext` | Any | Synchronously send, wait for completion, and ignore output. |
+| `SendDirective` / `SendDirectiveContext` / `SendSyncDirective` / `SendSyncDirectiveContext` | Any | Synchronously send and return raw output; optional `DirectiveOption` values override this wait. |
+| `SendDirectiveIgnoreOutput` / `SendDirectiveIgnoreOutputContext` | Any | Synchronously send, wait for completion, and ignore output; optional `DirectiveOption` values override this wait. |
 | `SendDirectiveAsync` / `SendDirectiveAsyncContext` | Any | Send asynchronously. |
 | `StartRecording` / `StartRecordingContext` | `alog` | Start recording asynchronously. |
 | `StartReplaying` / `StartReplayingContext` | `aplay` | Start replay asynchronously. |
@@ -760,6 +772,8 @@ type LogInfo struct {
 | `Keypad` / `KeypadContext` | `kpad` | Send a keyboard command; `Async=false` waits synchronously and ignores output. |
 
 ### `helper` package methods
+
+Sync-output helpers such as `Alog`, `Astop`, `Join`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
 
 | Method | Command | Return |
 |---|---|---|
@@ -787,6 +801,8 @@ type LogInfo struct {
 | `M10` | `m10` | `error` |
 
 ### Common `controller.Controller` proxies
+
+Matching sync-output proxy methods on `Controller` also accept optional `mkpgo.DirectiveOption` values.
 
 `controller.Controller` wraps helper functions and higher-level keyboard/mouse operations:
 

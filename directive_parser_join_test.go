@@ -16,8 +16,8 @@ func TestRawDirectiveJoinParseConnected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if !strings.Contains(got, "connect: Connected") {
-		t.Fatalf("Parse() = %q, want connected output", got)
+	if got != "connected" {
+		t.Fatalf("Parse() = %q, want connected", got)
 	}
 }
 
@@ -33,8 +33,8 @@ func TestRawDirectiveJoinParseConnectedWithoutArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
-	if !strings.Contains(got, "connect: Connected") {
-		t.Fatalf("Parse() = %q, want connected output", got)
+	if got != "connected" {
+		t.Fatalf("Parse() = %q, want connected", got)
 	}
 }
 

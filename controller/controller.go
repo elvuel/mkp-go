@@ -96,13 +96,13 @@ func (c *Controller) StopRecord() error {
 }
 
 // helper func Alog(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) (string, error)
-func (c *Controller) Alog(logName string, opt *mkpgo.LogOption) (string, error) {
-	return helper.Alog(c.sfport, logName, opt)
+func (c *Controller) Alog(logName string, opt *mkpgo.LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return helper.Alog(c.sfport, logName, opt, opts...)
 }
 
 // helper func Astop(sfport *mkpgo.SFSerialPort) error
-func (c *Controller) Astop() error {
-	return helper.Astop(c.sfport)
+func (c *Controller) Astop(opts ...mkpgo.DirectiveOption) error {
+	return helper.Astop(c.sfport, opts...)
 }
 
 // helper func Cancel(sfport *mkpgo.SFSerialPort) error
@@ -110,19 +110,19 @@ func (c *Controller) Cancel() error {
 	return helper.Cancel(c.sfport)
 }
 
-// helper func Join(sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption) (string, error)
-func (c *Controller) Join(opt *mkpgo.JoinOption) (string, error) {
-	return helper.Join(c.sfport, opt)
+// helper func Join(sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption, opts ...mkpgo.DirectiveOption) (string, error)
+func (c *Controller) Join(opt *mkpgo.JoinOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return helper.Join(c.sfport, opt, opts...)
 }
 
 // helper func DeviceSN(sfport *mkpgo.SFSerialPort) (*mkpgo.SN, error)
-func (c *Controller) DeviceSN() (*mkpgo.SN, error) {
-	return helper.DeviceSN(c.sfport)
+func (c *Controller) DeviceSN(opts ...mkpgo.DirectiveOption) (*mkpgo.SN, error) {
+	return helper.DeviceSN(c.sfport, opts...)
 }
 
 // helper func ListDir(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.FileSystem, error)
-func (c *Controller) ListDir(path string) (*mkpgo.FileSystem, error) {
-	return helper.ListDir(c.sfport, path)
+func (c *Controller) ListDir(path string, opts ...mkpgo.DirectiveOption) (*mkpgo.FileSystem, error) {
+	return helper.ListDir(c.sfport, path, opts...)
 }
 
 // helper func ComposeLogDirctory(logDir string) string
@@ -131,8 +131,8 @@ func (c *Controller) ComposeLogDirctory(logDir string) string {
 }
 
 // helper func CleanDir(sfport *mkpgo.SFSerialPort, path string) error
-func (c *Controller) CleanDir(path string) error {
-	return helper.CleanDir(c.sfport, path)
+func (c *Controller) CleanDir(path string, opts ...mkpgo.DirectiveOption) error {
+	return helper.CleanDir(c.sfport, path, opts...)
 }
 
 // helper func ComposeLogFullpath(logPath string) string
@@ -141,28 +141,28 @@ func (c *Controller) ComposeLogFullpath(logPath string) string {
 }
 
 // helper func DeleteFile(sfport *mkpgo.SFSerialPort, path string) error
-func (c *Controller) DeleteFile(path string) error {
-	return helper.DeleteFile(c.sfport, path)
+func (c *Controller) DeleteFile(path string, opts ...mkpgo.DirectiveOption) error {
+	return helper.DeleteFile(c.sfport, path, opts...)
 }
 
 // helper func Alive(sfport *mkpgo.SFSerialPort) (*mkpgo.Heartbeat, error)
-func (c *Controller) Alive() (*mkpgo.Heartbeat, error) {
-	return helper.Alive(c.sfport)
+func (c *Controller) Alive(opts ...mkpgo.DirectiveOption) (*mkpgo.Heartbeat, error) {
+	return helper.Alive(c.sfport, opts...)
 }
 
 // helper func Atime(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogLength, error)
-func (c *Controller) Atime(path string) (*mkpgo.LogLength, error) {
-	return helper.Atime(c.sfport, path)
+func (c *Controller) Atime(path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogLength, error) {
+	return helper.Atime(c.sfport, path, opts...)
 }
 
 // helper func Aversion(sfport *mkpgo.SFSerialPort) (*mkpgo.MKPVersion, error)
-func (c *Controller) Aversion() (*mkpgo.MKPVersion, error) {
-	return helper.Aversion(c.sfport)
+func (c *Controller) Aversion(opts ...mkpgo.DirectiveOption) (*mkpgo.MKPVersion, error) {
+	return helper.Aversion(c.sfport, opts...)
 }
 
 // helper func AInspect(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogInfo, error)
-func (c *Controller) AInspect(path string) (*mkpgo.LogInfo, error) {
-	return helper.AInspect(c.sfport, path)
+func (c *Controller) AInspect(path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogInfo, error) {
+	return helper.AInspect(c.sfport, path, opts...)
 }
 
 // KeyDown proxies helper.KeyDown and accepts optional kpad settings.

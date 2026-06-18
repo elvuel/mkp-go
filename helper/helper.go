@@ -33,11 +33,11 @@ func StartRecordContext(ctx context.Context, sfport *mkpgo.SFSerialPort, logName
 	return sfport.StartRecordingContext(ctx, strings.Join(args, " "))
 }
 
-func Alog(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) (string, error) {
-	return AlogContext(context.Background(), sfport, logName, opt)
+func Alog(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return AlogContext(context.Background(), sfport, logName, opt, opts...)
 }
 
-func AlogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) (string, error) {
+func AlogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
 	if !sfport.SyncOuputEnabled {
 		return "", errors.New("please enable sync mode first")
 	}
@@ -52,7 +52,7 @@ func AlogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, logName string
 	directive := "alog " + strings.Join(args, " ")
 	fmt.Println(directive)
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	// log.Println("got ################ alog response:", result)
 
@@ -74,17 +74,17 @@ func AlogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, logName string
 	return "", mkpgo.ErrDirectiveParserMissing
 }
 
-func Astop(sfport *mkpgo.SFSerialPort) error {
-	return AstopContext(context.Background(), sfport)
+func Astop(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) error {
+	return AstopContext(context.Background(), sfport, opts...)
 }
 
-func AstopContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error {
+func AstopContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) error {
 	if !sfport.SyncOuputEnabled {
 		return errors.New("please enable sync mode first")
 	}
 	directive := "astop"
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return err
@@ -107,14 +107,14 @@ func CancelContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error {
 }
 
 // Join connects the device to Wi-Fi using join directive.
-// Join 使用 join 指令连接 Wi-Fi；opt 为 nil 或空时使用最近保存的 Wi-Fi 配置。
-func Join(sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption) (string, error) {
-	return JoinContext(context.Background(), sfport, opt)
+// Join 使用 join 指令连接 Wi-Fi；opt 为 nil 或空时使用最近保存的 Wi-Fi 配置；opts 可覆盖本次同步等待设置。
+func Join(sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return JoinContext(context.Background(), sfport, opt, opts...)
 }
 
 // JoinContext connects the device to Wi-Fi using join directive with context.
-// JoinContext 使用 join 指令和 context 连接 Wi-Fi；opt 为 nil 或空时使用最近保存的 Wi-Fi 配置。
-func JoinContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption) (string, error) {
+// JoinContext 使用 join 指令和 context 连接 Wi-Fi；opt 为 nil 或空时使用最近保存的 Wi-Fi 配置；opts 可覆盖本次同步等待设置。
+func JoinContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption, opts ...mkpgo.DirectiveOption) (string, error) {
 	if !sfport.SyncOuputEnabled {
 		return "", errors.New("please enable sync mode first")
 	}
@@ -124,7 +124,7 @@ func JoinContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.Joi
 		directive += " " + strings.Join(args, " ")
 	}
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 	if err != nil {
 		return "", err
 	}
@@ -137,19 +137,19 @@ func JoinContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.Joi
 }
 
 // DeviceSN 指令 返回设备序列号
-func DeviceSN(sfport *mkpgo.SFSerialPort) (*mkpgo.SN, error) {
-	return DeviceSNContext(context.Background(), sfport)
+func DeviceSN(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.SN, error) {
+	return DeviceSNContext(context.Background(), sfport, opts...)
 }
 
 // DeviceSNContext 指令 返回设备序列号
-func DeviceSNContext(ctx context.Context, sfport *mkpgo.SFSerialPort) (*mkpgo.SN, error) {
+func DeviceSNContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.SN, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
 
 	directive := "sn"
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return nil, err
@@ -173,19 +173,19 @@ func DeviceSNContext(ctx context.Context, sfport *mkpgo.SFSerialPort) (*mkpgo.SN
 }
 
 // ListDir 指令 返回路径下的所有子目录及文件
-func ListDir(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.FileSystem, error) {
-	return ListDirContext(context.Background(), sfport, path)
+func ListDir(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.FileSystem, error) {
+	return ListDirContext(context.Background(), sfport, path, opts...)
 }
 
 // ListDirContext 指令 返回路径下的所有子目录及文件
-func ListDirContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string) (*mkpgo.FileSystem, error) {
+func ListDirContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.FileSystem, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
 
 	directive := "list_dir " + path
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return nil, err
@@ -220,11 +220,11 @@ func ComposeLogDirctory(logDir string) string {
 	return logDir
 }
 
-func CleanDir(sfport *mkpgo.SFSerialPort, path string) error {
-	return CleanDirContext(context.Background(), sfport, path)
+func CleanDir(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) error {
+	return CleanDirContext(context.Background(), sfport, path, opts...)
 }
 
-func CleanDirContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string) error {
+func CleanDirContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) error {
 	if !strings.HasPrefix(path, "/eMMC/applog") {
 		return errors.New("only can clean directory in working directory") // only can delete file within /eMMC/applog
 	}
@@ -235,7 +235,7 @@ func CleanDirContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path strin
 
 	directive := "clean_dir " + path
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return err
@@ -276,12 +276,12 @@ func ComposeLogFullpath(logPath string) string {
 }
 
 // DeleteFile 指令 只能删除在/eMMC/applog下的文件(path 路径)
-func DeleteFile(sfport *mkpgo.SFSerialPort, path string) error {
-	return DeleteFileContext(context.Background(), sfport, path)
+func DeleteFile(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) error {
+	return DeleteFileContext(context.Background(), sfport, path, opts...)
 }
 
 // DeleteFileContext 指令 只能删除在/eMMC/applog下的文件(path 路径)
-func DeleteFileContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string) error {
+func DeleteFileContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) error {
 	path = ComposeLogFullpath(path)
 
 	if !strings.HasPrefix(path, "/eMMC/applog") {
@@ -294,7 +294,7 @@ func DeleteFileContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path str
 
 	directive := "delete_file " + path
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return err
@@ -323,19 +323,19 @@ func DeleteFileContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path str
 }
 
 // Alive 指令 心跳时间戳
-func Alive(sfport *mkpgo.SFSerialPort) (*mkpgo.Heartbeat, error) {
-	return AliveContext(context.Background(), sfport)
+func Alive(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.Heartbeat, error) {
+	return AliveContext(context.Background(), sfport, opts...)
 }
 
 // AliveContext 指令 心跳时间戳
-func AliveContext(ctx context.Context, sfport *mkpgo.SFSerialPort) (*mkpgo.Heartbeat, error) {
+func AliveContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.Heartbeat, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
 
 	directive := "alive"
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return nil, err
@@ -363,19 +363,19 @@ func AliveContext(ctx context.Context, sfport *mkpgo.SFSerialPort) (*mkpgo.Heart
 }
 
 // Atime 指令 返回 日志时长。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
-func Atime(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogLength, error) {
-	return AtimeContext(context.Background(), sfport, path)
+func Atime(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogLength, error) {
+	return AtimeContext(context.Background(), sfport, path, opts...)
 }
 
 // AtimeContext 指令 返回日志时长
-func AtimeContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogLength, error) {
+func AtimeContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogLength, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
 
 	directive := "atime " + path
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return nil, err
@@ -403,19 +403,19 @@ func AtimeContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string) 
 }
 
 // Aversion 指令 返回 版本信息。
-func Aversion(sfport *mkpgo.SFSerialPort) (*mkpgo.MKPVersion, error) {
-	return AversionContext(context.Background(), sfport)
+func Aversion(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.MKPVersion, error) {
+	return AversionContext(context.Background(), sfport, opts...)
 }
 
 // AversionContext 指令 返回版本信息。
-func AversionContext(ctx context.Context, sfport *mkpgo.SFSerialPort) (*mkpgo.MKPVersion, error) {
+func AversionContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.MKPVersion, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
 
 	directive := "aversion"
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return nil, err
@@ -443,19 +443,19 @@ func AversionContext(ctx context.Context, sfport *mkpgo.SFSerialPort) (*mkpgo.MK
 }
 
 // AInspect 指令 返回 日志基础信息。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
-func AInspect(sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogInfo, error) {
-	return AInspectContext(context.Background(), sfport, path)
+func AInspect(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogInfo, error) {
+	return AInspectContext(context.Background(), sfport, path, opts...)
 }
 
 // AInspectContext 指令 返回日志基础信息。
-func AInspectContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogInfo, error) {
+func AInspectContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogInfo, error) {
 	if !sfport.SyncOuputEnabled {
 		return nil, errors.New("please enable sync mode first")
 	}
 
 	directive := "ainsp " + path
 
-	result, err := sfport.SendDirectiveContext(ctx, directive)
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
 
 	if err != nil {
 		return nil, err
