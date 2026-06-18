@@ -107,6 +107,27 @@ func (opt *WifiAutoOption) CliArgs() []string {
 	return []string{opt.State}
 }
 
+// AHTTPBaseOption defines optional argument for ahttpbase command.
+// AHTTPBaseOption 定义 ahttpbase 命令的可选参数。
+type AHTTPBaseOption struct {
+	URL string `json:"url"` // HTTP base URL, without trailing slash.
+}
+
+// CliArgs converts ahttpbase options to CLI argument list.
+// CliArgs 将 ahttpbase 参数转换为命令行参数数组。
+func (opt *AHTTPBaseOption) CliArgs() []string {
+	if opt == nil || opt.URL == "" {
+		return nil
+	}
+	return []string{opt.URL}
+}
+
+// AHTTPBase is the JSON output model returned by ahttpbase.
+// AHTTPBase 是 ahttpbase 返回的 JSON 结构。
+type AHTTPBase struct {
+	AHTTPBase string `json:"ahttpbase"`
+}
+
 // AdumjOption defines arguments for adumj command.
 // AdumjOption 定义 adumj 命令参数。
 type AdumjOption struct {

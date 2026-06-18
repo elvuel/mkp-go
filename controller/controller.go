@@ -165,6 +165,11 @@ func (c *Controller) Aversion(opts ...mkpgo.DirectiveOption) (*mkpgo.MKPVersion,
 	return helper.Aversion(c.sfport, opts...)
 }
 
+// helper func AHTTPBase(sfport *mkpgo.SFSerialPort, opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error)
+func (c *Controller) AHTTPBase(opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error) {
+	return helper.AHTTPBase(c.sfport, opt, opts...)
+}
+
 // helper func Adumj(sfport *mkpgo.SFSerialPort, opt *mkpgo.AdumjOption, opts ...mkpgo.DirectiveOption) (*mkpgo.ActionDump, error)
 func (c *Controller) Adumj(opt *mkpgo.AdumjOption, opts ...mkpgo.DirectiveOption) (*mkpgo.ActionDump, error) {
 	return helper.Adumj(c.sfport, opt, opts...)

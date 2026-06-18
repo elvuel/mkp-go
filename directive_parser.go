@@ -34,6 +34,7 @@ var (
 	_ RawDirectiveOutputParser = (*RawDirective_join)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_wifi_auto)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_adumj)(nil)
+	_ RawDirectiveOutputParser = (*RawDirective_ahttpbase)(nil)
 
 	// Built-in singleton parser instances.
 	// 内置解析器单例实例。
@@ -51,6 +52,7 @@ var (
 	InstantRawDirective_join        = NewRawDirective_join()
 	InstantRawDirective_wifi_auto   = NewRawDirective_wifi_auto()
 	InstantRawDirective_adumj       = NewRawDirective_adumj()
+	InstantRawDirective_ahttpbase   = NewRawDirective_ahttpbase()
 )
 
 // InitParsers registers built-in directive output parsers.
@@ -71,6 +73,7 @@ func InitParsers() {
 		InstantRawDirective_join,
 		InstantRawDirective_wifi_auto,
 		InstantRawDirective_adumj,
+		InstantRawDirective_ahttpbase,
 	}
 
 	for _, parser := range parsers {
@@ -716,6 +719,67 @@ func (r *RawDirective_adumj) Parse(cli, data string) (string, error) {
 	if start >= 0 && end >= start {
 		return strings.TrimSpace(data[start : end+1]), nil
 	}
+	if data == "" {
+		return "", nil
+	}
+
+	return data, ErrRawDirectiveParseFailed
+}
+
+// RawDirective_ahttpbase parses ahttpbase output (file-management API endpoint base URL).
+// RawDirective_ahttpbase 解析 ahttpbase 指令输出（文件管理服务器 API endpoint base URL）。
+type RawDirective_ahttpbase struct {
+	*RawDirective
+	Name string
+}
+
+// NewRawDirective_ahttpbase creates ahttpbase parser.
+// NewRawDirective_ahttpbase 创建 ahttpbase 解析器。
+func NewRawDirective_ahttpbase() *RawDirective_ahttpbase {
+	return &RawDirective_ahttpbase{Name: "ahttpbase", RawDirective: &RawDirective{JSONOutput: true}}
+}
+
+// String returns directive name.
+// String 返回对应指令名。
+func (r *RawDirective_ahttpbase) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_ahttpbase) EOFFlag() string {
+	return EOFCLI
+}
+
+// Parse parses ahttpbase raw output.
+// Parse 解析 ahttpbase 原始输出。
+func (r *RawDirective_ahttpbase) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+	data = strings.TrimSpace(data)
+	data = strings.TrimSuffix(data, EOFCLI)
+	data = strings.TrimSpace(data)
+	data = strings.TrimSuffix(data, EOFDefault)
+	data = strings.TrimSpace(data)
+
+	start := strings.Index(data, "{")
+	end := strings.LastIndex(data, "}")
+	if start >= 0 && end >= start {
+		return strings.TrimSpace(data[start : end+1]), nil
+	}
+
+	if strings.EqualFold(data, "OK") {
+		url := strings.TrimSpace(strings.TrimPrefix(cli, r.Name))
+		encoded, err := json.Marshal(AHTTPBase{AHTTPBase: url})
+		if err != nil {
+			return "", err
+		}
+		return string(encoded), nil
+	}
+
 	if data == "" {
 		return "", nil
 	}

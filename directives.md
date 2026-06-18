@@ -61,6 +61,7 @@ fmt.Println(sn, err)
 | `join` | `join [ssid password]` | 连接 Wi-Fi；无参数时使用最近保存配置 | `helper.Join` / `Controller.Join` | 文本，解析器 `RawDirective_join`；成功包含 `connect: Connected` |
 | `wifi_auto` | `wifi_auto [0|1]` | 查看或设置 Wi-Fi 自动连接状态 | `helper.WifiAuto` / `Controller.WifiAuto` | 文本，解析器 `RawDirective_wifi_auto`；查询返回 `on` / `off` |
 | `adumj` | `adumj <logPath>` | 将日志文件转为便于解读的 JSON | `helper.Adumj` / `Controller.Adumj` | JSON -> `ActionDump`；EOF 为 `cli>`，成功内容包含 `<EOF>` |
+| `ahttpbase` | `ahttpbase [url]` | 查看或设置文件管理服务器 API endpoint base URL | `helper.AHTTPBase` / `Controller.AHTTPBase` | JSON -> `AHTTPBase`；EOF 为 `cli>` |
 | `alive` | `alive` | 心跳/存活检测 | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | 获取日志时长 | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | 获取版本信息 | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -519,6 +520,55 @@ Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
 
+### `ahttpbase`：文件管理服务器 API endpoint base URL
+
+**CLI：**
+
+```text
+ahttpbase [url]
+```
+
+**Go API：**
+
+```go
+base, err := helper.AHTTPBase(sfport, nil) // 查询
+base, err = helper.AHTTPBase(sfport, &mkpgo.AHTTPBaseOption{URL: "http://localhost:3000"}) // 设置
+fmt.Println(base.AHTTPBase)
+```
+
+`Controller` 代理：
+
+```go
+base, err := ctrl.AHTTPBase(&mkpgo.AHTTPBaseOption{URL: "http://localhost:3000"})
+```
+
+**解析器：** `RawDirective_ahttpbase`
+
+- 输出类型：JSON。
+- 结束标记：`cli>`。
+- 查询成功时提取固件返回的 `{ "ahttpbase": "..." }` JSON。
+- 设置成功时固件返回 `OK`；解析器会按传入 URL 合成 JSON，方便 helper 统一反序列化为 `AHTTPBase`。
+- 失败判断：解析前 `PreFlight` 会将 `Command returned non-zero error code` 转为 `ErrRawDirecitveExecutionFailed`。
+
+查询输出示例：
+
+```text
+ahttpbase
+W (954891) setupnvs: Error reading 'ahttpbase' from NVS: ESP_ERR_NVS_NOT_FOUND
+{ "ahttpbase": "" }
+
+<EOF>
+cli>
+```
+
+设置输出示例：
+
+```text
+ahttpbase http://localhost:3000
+OK
+
+cli>
+```
 ### `alive`：心跳检测
 
 **CLI：**
@@ -816,6 +866,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `join` | `RawDirective_join` | 否 | `cli>` | 文本；成功需包含 `connect: Connected`，错误码输出返回执行失败。 |
 | `wifi_auto` | `RawDirective_wifi_auto` | 否 | `cli>` | 文本；查询返回 `on` / `off`；设置成功返回空字符串。 |
 | `adumj` | `RawDirective_adumj` | 是 | `cli>` | 提取 JSON 文本 -> `ActionDump`；成功输出中的 `<EOF>` 作为内容被解析器剔除。 |
+| `ahttpbase` | `RawDirective_ahttpbase` | 是 | `cli>` | 查询时提取 JSON -> `AHTTPBase`；设置成功 `OK` 时合成 JSON。 |
 | `alive` | `RawDirective_alive` | 是 | `<EOF>` | JSON 文本 -> `Heartbeat`。 |
 | `atime` | `RawDirective_atime` | 是 | `<EOF>` | 查找包含 `"seconds"` 的 JSON 行 -> `LogLength`。 |
 | `aversion` | `RawDirective_aversion` | 是 | `<EOF>` | JSON 文本 -> `MKPVersion`。 |
@@ -879,6 +930,14 @@ type WifiAutoOption struct {
     State string `json:"state"`
 }
 
+type AHTTPBaseOption struct {
+    URL string `json:"url"`
+}
+
+type AHTTPBase struct {
+    AHTTPBase string `json:"ahttpbase"`
+}
+
 type AdumjOption struct {
     LogPath string `json:"logPath"`
 }
@@ -923,7 +982,7 @@ type LogInfo struct {
 
 ### `helper` 包方法
 
-需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`Adumj`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
+需要同步输出的 helper（如 `Alog`、`Astop`、`Join`、`WifiAuto`、`AHTTPBase`、`Adumj`、`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`）均支持可选 `mkpgo.DirectiveOption`，可用 `mkpgo.WithSyncOutputTimeout(...)` 覆盖本次等待超时。
 
 | 方法 | 对应指令 | 返回 |
 |---|---|---|
@@ -938,6 +997,7 @@ type LogInfo struct {
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
 | `Join` / `JoinContext` | `join` | `string, error` |
 | `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
+| `AHTTPBase` / `AHTTPBaseContext` | `ahttpbase` | `*AHTTPBase, error` |
 | `Adumj` / `AdumjContext` | `adumj` | `*ActionDump, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
 | `Atime` / `AtimeContext` | `atime` | `*LogLength, error` |
@@ -959,7 +1019,7 @@ type LogInfo struct {
 `controller.Controller` 封装了 helper 和键鼠高级操作：
 
 - 录制/回放：`StartRecord`、`StopRecord`、`Alog`、`Astop`、`Cancel`
-- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`Adumj`、`Alive`、`Atime`、`Aversion`、`AInspect`
+- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`WifiAuto`、`AHTTPBase`、`Adumj`、`Alive`、`Atime`、`Aversion`、`AInspect`
 - 键盘：`KeyDown`、`KeyUp`、`KeyTap`、`KeyPresses`、`KeypadRelease`、`KeypadReleaseAll`
 - 鼠标：`MouseClick`、`MouseClickWithOption`、`MouseScroll`、`MouseScrollWithOption`、`MouseScrollWithButton`、`MouseDown`、`MouseReleaseAll`、`MouseUp`、`M10Move`、`MouseMove`
 

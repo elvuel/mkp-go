@@ -61,6 +61,7 @@ fmt.Println(sn, err)
 | `join` | `join [ssid password]` | Connect Wi-Fi; without args, use the most recently saved config | `helper.Join` / `Controller.Join` | Text parser `RawDirective_join`; success contains `connect: Connected` |
 | `wifi_auto` | `wifi_auto [0|1]` | Inspect or set Wi-Fi auto-connect state | `helper.WifiAuto` / `Controller.WifiAuto` | Text parser `RawDirective_wifi_auto`; query returns `on` / `off` |
 | `adumj` | `adumj <logPath>` | Dump a log file as readable JSON | `helper.Adumj` / `Controller.Adumj` | JSON -> `ActionDump`; EOF is `cli>`; successful output contains `<EOF>` |
+| `ahttpbase` | `ahttpbase [url]` | Inspect or set file-management API endpoint base URL | `helper.AHTTPBase` / `Controller.AHTTPBase` | JSON -> `AHTTPBase`; EOF is `cli>` |
 | `alive` | `alive` | Heartbeat / liveness check | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | Get log duration | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | Get firmware/application version | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -519,6 +520,55 @@ Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
 
+### `ahttpbase`: file-management API endpoint base URL
+
+**CLI:**
+
+```text
+ahttpbase [url]
+```
+
+**Go API:**
+
+```go
+base, err := helper.AHTTPBase(sfport, nil) // query
+base, err = helper.AHTTPBase(sfport, &mkpgo.AHTTPBaseOption{URL: "http://localhost:3000"}) // set
+fmt.Println(base.AHTTPBase)
+```
+
+`Controller` proxy:
+
+```go
+base, err := ctrl.AHTTPBase(&mkpgo.AHTTPBaseOption{URL: "http://localhost:3000"})
+```
+
+**Parser:** `RawDirective_ahttpbase`
+
+- Output type: JSON.
+- EOF marker: `cli>`.
+- Query success extracts the firmware JSON `{ "ahttpbase": "..." }`.
+- Set success returns `OK` from firmware; the parser synthesizes JSON from the URL argument so helpers can always unmarshal into `AHTTPBase`.
+- Failure detection: `PreFlight` turns `Command returned non-zero error code` into `ErrRawDirecitveExecutionFailed`.
+
+Query output example:
+
+```text
+ahttpbase
+W (954891) setupnvs: Error reading 'ahttpbase' from NVS: ESP_ERR_NVS_NOT_FOUND
+{ "ahttpbase": "" }
+
+<EOF>
+cli>
+```
+
+Set output example:
+
+```text
+ahttpbase http://localhost:3000
+OK
+
+cli>
+```
 ### `alive`: heartbeat check
 
 **CLI:**
@@ -816,6 +866,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `join` | `RawDirective_join` | No | `cli>` | Text; success must contain `connect: Connected`; error-code output returns execution failure. |
 | `wifi_auto` | `RawDirective_wifi_auto` | No | `cli>` | Text; query returns `on` / `off`; successful set returns an empty string. |
 | `adumj` | `RawDirective_adumj` | Yes | `cli>` | Extracts JSON text -> `ActionDump`; the `<EOF>` line in successful output is stripped as content. |
+| `ahttpbase` | `RawDirective_ahttpbase` | Yes | `cli>` | Query extracts JSON -> `AHTTPBase`; successful set `OK` is synthesized as JSON. |
 | `alive` | `RawDirective_alive` | Yes | `<EOF>` | JSON text -> `Heartbeat`. |
 | `atime` | `RawDirective_atime` | Yes | `<EOF>` | Finds a JSON line containing `"seconds"` -> `LogLength`. |
 | `aversion` | `RawDirective_aversion` | Yes | `<EOF>` | JSON text -> `MKPVersion`. |
@@ -879,6 +930,14 @@ type WifiAutoOption struct {
     State string `json:"state"`
 }
 
+type AHTTPBaseOption struct {
+    URL string `json:"url"`
+}
+
+type AHTTPBase struct {
+    AHTTPBase string `json:"ahttpbase"`
+}
+
 type AdumjOption struct {
     LogPath string `json:"logPath"`
 }
@@ -923,7 +982,7 @@ type LogInfo struct {
 
 ### `helper` package methods
 
-Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `Adumj`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
+Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AHTTPBase`, `Adumj`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
 
 | Method | Command | Return |
 |---|---|---|
@@ -938,6 +997,7 @@ Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `Adumj`, `Devic
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
 | `Join` / `JoinContext` | `join` | `string, error` |
 | `WifiAuto` / `WifiAutoContext` | `wifi_auto` | `string, error` |
+| `AHTTPBase` / `AHTTPBaseContext` | `ahttpbase` | `*AHTTPBase, error` |
 | `Adumj` / `AdumjContext` | `adumj` | `*ActionDump, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
 | `Atime` / `AtimeContext` | `atime` | `*LogLength, error` |
@@ -959,7 +1019,7 @@ Matching sync-output proxy methods on `Controller` also accept optional `mkpgo.D
 `controller.Controller` wraps helper functions and higher-level keyboard/mouse operations:
 
 - Recording/replay: `StartRecord`, `StopRecord`, `Alog`, `Astop`, `Cancel`
-- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `Adumj`, `Alive`, `Atime`, `Aversion`, `AInspect`
+- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `WifiAuto`, `AHTTPBase`, `Adumj`, `Alive`, `Atime`, `Aversion`, `AInspect`
 - Keyboard: `KeyDown`, `KeyUp`, `KeyTap`, `KeyPresses`, `KeypadRelease`, `KeypadReleaseAll`
 - Mouse: `MouseClick`, `MouseClickWithOption`, `MouseScroll`, `MouseScrollWithOption`, `MouseScrollWithButton`, `MouseDown`, `MouseReleaseAll`, `MouseUp`, `M10Move`, `MouseMove`
 

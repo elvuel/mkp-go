@@ -475,6 +475,47 @@ func AversionContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mk
 	return nil, mkpgo.ErrDirectiveParserMissing
 }
 
+// AHTTPBase inspects or sets file-management API endpoint base URL using ahttpbase directive.
+// AHTTPBase 使用 ahttpbase 指令查看或设置文件管理服务器 API endpoint base URL。
+func AHTTPBase(sfport *mkpgo.SFSerialPort, opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error) {
+	return AHTTPBaseContext(context.Background(), sfport, opt, opts...)
+}
+
+// AHTTPBaseContext inspects or sets file-management API endpoint base URL using ahttpbase directive with context.
+// AHTTPBaseContext 使用 ahttpbase 指令和 context 查看或设置文件管理服务器 API endpoint base URL。
+func AHTTPBaseContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error) {
+	if !sfport.SyncOuputEnabled {
+		return nil, errors.New("please enable sync mode first")
+	}
+
+	directive := "ahttpbase"
+	if args := opt.CliArgs(); len(args) > 0 {
+		directive += " " + strings.Join(args, " ")
+	}
+
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		parsedResult, err := parser.Parse(directive, result)
+		if err != nil {
+			return nil, err
+		}
+		if parser.IsJSONOutput() {
+			base := &mkpgo.AHTTPBase{}
+			err = parser.UnmarshalTo(parsedResult, base)
+			if err != nil {
+				return nil, err
+			}
+			return base, nil
+		}
+	}
+
+	return nil, mkpgo.ErrDirectiveParserMissing
+}
+
 // Adumj dumps an action log as readable JSON using adumj directive.
 // Adumj 使用 adumj 指令将动作日志转储为便于解读的 JSON。
 func Adumj(sfport *mkpgo.SFSerialPort, opt *mkpgo.AdumjOption, opts ...mkpgo.DirectiveOption) (*mkpgo.ActionDump, error) {
