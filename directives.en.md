@@ -13,7 +13,7 @@ English | [中文](./directives.md)
 - [Quick Overview](#quick-overview)
 - [Synchronous and Asynchronous Sending](#synchronous-and-asynchronous-sending)
 - [Recording and Replay Commands](#recording-and-replay-commands)
-- [Device and Filesystem Commands](#device-and-filesystem-commands)
+- [Device, Network, and Filesystem Commands](#device-network-and-filesystem-commands)
 - [Mouse Command: m10](#mouse-command-m10)
 - [Keyboard Command: kpad](#keyboard-command-kpad)
 - [Output Parser Index](#output-parser-index)
@@ -58,6 +58,7 @@ fmt.Println(sn, err)
 | `list_dir` | `list_dir <path>` | List directory contents | `helper.ListDir` | JSON -> `FileSystem` |
 | `clean_dir` | `clean_dir <path>` | Clean a directory | `helper.CleanDir` | Empty on success; error on failure |
 | `delete_file` | `delete_file <path>` | Delete a file | `helper.DeleteFile` | Empty on success; error on failure |
+| `join` | `join [ssid password]` | Connect Wi-Fi; without args, use the most recently saved config | `helper.Join` / `Controller.Join` | Text parser `RawDirective_join`; success contains `connect: Connected` |
 | `alive` | `alive` | Heartbeat / liveness check | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | Get log duration | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | Get firmware/application version | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -197,7 +198,7 @@ err = helper.Cancel(sfport)
 - EOF marker: `<EOF>`.
 - Note: `sfport.CancelReplay()` and `helper.Cancel()` currently send asynchronously and do not parse output. If output is required, call `SendDirective("acancel")` directly and then parse it with the registered parser.
 
-## Device and Filesystem Commands
+## Device, Network, and Filesystem Commands
 
 ### `sn`: get serial number
 
@@ -301,6 +302,84 @@ err := helper.DeleteFile(sfport, "demo/record1")
 - Output type: text/empty.
 - EOF marker: `cli>`.
 - If output contains `Failed to remove`, the parser returns `failed to remove file`.
+
+### `join`: connect Wi-Fi
+
+**CLI:**
+
+```text
+join [ssid password]
+```
+
+Call forms:
+
+```text
+join wifi-name password
+join
+```
+
+- With `ssid` / `password`, the device attempts to connect to the specified Wi-Fi network.
+- Without arguments, the device uses the most recently saved Wi-Fi configuration.
+
+**Go API:**
+
+```go
+// Connect to a specified Wi-Fi network.
+out, err := helper.Join(sfport, &mkpgo.JoinOption{
+    SSID:     "ssid",
+    Password: "password1234",
+})
+
+// Use the most recently saved Wi-Fi configuration.
+out, err = helper.Join(sfport, nil)
+```
+
+`Controller` proxy:
+
+```go
+out, err := ctrl.Join(&mkpgo.JoinOption{SSID: "ssid", Password: "password1234"})
+out, err = ctrl.Join(nil)
+```
+
+**Parser:** `RawDirective_join`
+
+- Output type: text, not JSON.
+- EOF marker: `cli>`.
+- Success rule: output contains `connect: Connected`.
+- Failure rule: output containing `Command returned non-zero error code` / `error code` returns `ErrRawDirecitveExecutionFailed`.
+
+Successful output example:
+
+```text
+join ssid password1234
+I (29664) connect: Connecting to 'ssid'
+W (29664) wifi:Password length matches WPA2 standards, authmode threshold changes from OPEN to WPA2
+I (31648) esp_netif_handlers: sta ip: 192.168.71.79, mask: 255.255.255.0, gw: 192.168.71.1
+I (31648) connect: Connected
+cli>
+```
+
+Failure output example:
+
+```text
+join ssid password1234
+I (8368) connect: Connecting to 'ssid'
+W (18376) connect: Connection timed out
+Command returned non-zero error code: 0x1 (ERROR)
+cli>
+```
+
+No-argument successful output example:
+
+```text
+join
+I (736848) connect: Connecting to ''
+ssid ChinaNet-9Wfg pass password1234
+W (736856) wifi:Password length matches WPA2 standards, authmode threshold changes from OPEN to WPA2
+W (736856) wifi:sta is connected, disconnect before connecting to new ap
+I (736872) connect: Connected
+cli>
+```
 
 ### `alive`: heartbeat check
 
@@ -596,6 +675,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `list_dir` | `RawDirective_list_dir` | Yes | `<EOF>` | JSON text -> `FileSystem`; empty content returns an empty string. |
 | `clean_dir` | `RawDirective_clean_dir` | No | `cli>` | Empty on success; output containing `Failed to` returns an error. |
 | `delete_file` | `RawDirective_delete_file` | No | `cli>` | Empty on success; output containing `Failed to remove` returns an error. |
+| `join` | `RawDirective_join` | No | `cli>` | Text; success must contain `connect: Connected`; error-code output returns execution failure. |
 | `alive` | `RawDirective_alive` | Yes | `<EOF>` | JSON text -> `Heartbeat`. |
 | `atime` | `RawDirective_atime` | Yes | `<EOF>` | Finds a JSON line containing `"seconds"` -> `LogLength`. |
 | `aversion` | `RawDirective_aversion` | Yes | `<EOF>` | JSON text -> `MKPVersion`. |
@@ -650,6 +730,11 @@ type LogOption struct {
     } `json:"stpos"`
 }
 
+type JoinOption struct {
+    SSID     string `json:"ssid"`
+    Password string `json:"password"`
+}
+
 type LogInfo struct {
     LogOption
     LogLength
@@ -687,6 +772,7 @@ type LogInfo struct {
 | `ListDir` / `ListDirContext` | `list_dir` | `*FileSystem, error` |
 | `CleanDir` / `CleanDirContext` | `clean_dir` | `error` |
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
+| `Join` / `JoinContext` | `join` | `string, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
 | `Atime` / `AtimeContext` | `atime` | `*LogLength, error` |
 | `Aversion` / `AversionContext` | `aversion` | `*MKPVersion, error` |
@@ -705,7 +791,7 @@ type LogInfo struct {
 `controller.Controller` wraps helper functions and higher-level keyboard/mouse operations:
 
 - Recording/replay: `StartRecord`, `StopRecord`, `Alog`, `Astop`, `Cancel`
-- Device/files: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, `AInspect`
+- Device/files/network: `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Join`, `Alive`, `Atime`, `Aversion`, `AInspect`
 - Keyboard: `KeyDown`, `KeyUp`, `KeyTap`, `KeyPresses`, `KeypadRelease`, `KeypadReleaseAll`
 - Mouse: `MouseClick`, `MouseClickWithOption`, `MouseScroll`, `MouseScrollWithOption`, `MouseScrollWithButton`, `MouseDown`, `MouseReleaseAll`, `MouseUp`, `M10Move`, `MouseMove`
 

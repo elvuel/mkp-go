@@ -31,6 +31,7 @@ var (
 	// 接口实现断言。
 	_ RawDirectiveOutputParser = (*RawDirective_sn)(nil)
 	_ RawDirectiveOutputParser = (*RawDirective_list_dir)(nil)
+	_ RawDirectiveOutputParser = (*RawDirective_join)(nil)
 
 	// Built-in singleton parser instances.
 	// 内置解析器单例实例。
@@ -45,6 +46,7 @@ var (
 	InstantRawDirective_astop       = NewRawDirective_astop()
 	InstantRawDirective_acancel     = NewRawDirective_acancel()
 	InstantRawDirective_alog        = NewRawDirective_alog()
+	InstantRawDirective_join        = NewRawDirective_join()
 )
 
 // InitParsers registers built-in directive output parsers.
@@ -62,6 +64,7 @@ func InitParsers() {
 		InstantRawDirective_astop,
 		InstantRawDirective_acancel,
 		InstantRawDirective_alog,
+		InstantRawDirective_join,
 	}
 
 	for _, parser := range parsers {
@@ -558,6 +561,55 @@ func (r *RawDirective_ainsp) Parse(cli, data string) (string, error) {
 	}
 
 	return "", nil
+}
+
+// RawDirective_join parses join Wi-Fi output.
+// RawDirective_join 解析 join Wi-Fi 指令输出。
+type RawDirective_join struct {
+	*RawDirective
+	Name string
+}
+
+// NewRawDirective_join creates join parser.
+// NewRawDirective_join 创建 join 解析器。
+func NewRawDirective_join() *RawDirective_join {
+	return &RawDirective_join{Name: "join", RawDirective: &RawDirective{JSONOutput: false}}
+}
+
+// String returns directive name.
+// String 返回对应指令名。
+func (r *RawDirective_join) String() string {
+	return r.Name
+}
+
+func (r *RawDirective_join) EOFFlag() string {
+	return EOFCLI
+}
+
+// Parse parses join raw output.
+// Parse 解析 join 原始输出。
+func (r *RawDirective_join) Parse(cli, data string) (string, error) {
+	data, err := r.PreFlight(data)
+	if err != nil {
+		return "", err
+	}
+
+	data = strings.TrimSpace(data)
+	data = strings.TrimPrefix(data, cli)
+	data = strings.TrimSpace(data)
+
+	lower := strings.ToLower(data)
+	if strings.Contains(lower, "error code") {
+		return "", ErrRawDirecitveExecutionFailed
+	}
+	if strings.Contains(data, "connect: Connected") {
+		return "connected", nil
+	}
+	if len(data) > 0 {
+		return data, ErrRawDirectiveParseFailed
+	}
+
+	return "", ErrRawDirectiveParseFailed
 }
 
 // RawDirective_alog parses alog output.

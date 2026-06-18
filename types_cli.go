@@ -68,6 +68,29 @@ func (opt *LogOption) CliArgs() []string {
 	return args
 }
 
+// JoinOption defines optional arguments for join Wi-Fi command.
+// JoinOption 定义 join Wi-Fi 命令的可选参数。
+type JoinOption struct {
+	SSID     string `json:"ssid"`     // Wi-Fi name/SSID
+	Password string `json:"password"` // Wi-Fi password
+}
+
+// CliArgs converts join options to CLI argument list.
+// CliArgs 将 join 参数转换为命令行参数数组。
+func (opt *JoinOption) CliArgs() []string {
+	if opt == nil || (opt.SSID == "" && opt.Password == "") {
+		return nil
+	}
+	args := make([]string, 0, 2)
+	if opt.SSID != "" {
+		args = append(args, opt.SSID)
+	}
+	if opt.Password != "" {
+		args = append(args, opt.Password)
+	}
+	return args
+}
+
 // LogInfo contains both log option metadata and duration.
 // LogInfo 同时包含日志参数与时长信息。
 type LogInfo struct {

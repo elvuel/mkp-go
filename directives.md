@@ -13,7 +13,7 @@
 - [快速总览](#快速总览)
 - [同步/异步发送规则](#同步异步发送规则)
 - [录制与回放指令](#录制与回放指令)
-- [设备与文件系统指令](#设备与文件系统指令)
+- [设备、网络与文件系统指令](#设备网络与文件系统指令)
 - [鼠标指令：m10](#鼠标指令m10)
 - [键盘指令：kpad](#键盘指令kpad)
 - [输出解析器索引](#输出解析器索引)
@@ -58,6 +58,7 @@ fmt.Println(sn, err)
 | `list_dir` | `list_dir <path>` | 列出目录内容 | `helper.ListDir` | JSON -> `FileSystem` |
 | `clean_dir` | `clean_dir <path>` | 清空目录 | `helper.CleanDir` | 成功返回空；失败返回错误 |
 | `delete_file` | `delete_file <path>` | 删除文件 | `helper.DeleteFile` | 成功返回空；失败返回错误 |
+| `join` | `join [ssid password]` | 连接 Wi-Fi；无参数时使用最近保存配置 | `helper.Join` / `Controller.Join` | 文本，解析器 `RawDirective_join`；成功包含 `connect: Connected` |
 | `alive` | `alive` | 心跳/存活检测 | `helper.Alive` | JSON -> `Heartbeat` |
 | `atime` | `atime <path>` | 获取日志时长 | `helper.Atime` | JSON -> `LogLength` |
 | `aversion` | `aversion` | 获取版本信息 | `helper.Aversion` | JSON -> `MKPVersion` |
@@ -197,7 +198,7 @@ err = helper.Cancel(sfport)
 - 结束标记：`<EOF>`。
 - 注意：`sfport.CancelReplay()` 和 `helper.Cancel()` 当前走异步发送，不会解析输出；如果需要输出，请直接使用 `SendDirective("acancel")` 再通过解析器解析。
 
-## 设备与文件系统指令
+## 设备、网络与文件系统指令
 
 ### `sn`：获取序列号
 
@@ -301,6 +302,84 @@ err := helper.DeleteFile(sfport, "demo/record1")
 - 输出类型：文本/空。
 - 结束标记：`cli>`。
 - 若输出包含 `Failed to remove`，返回 `failed to remove file`。
+
+### `join`：连接 Wi-Fi
+
+**CLI：**
+
+```text
+join [ssid password]
+```
+
+调用形式：
+
+```text
+join wifi-name password
+join
+```
+
+- 带 `ssid` / `password` 参数时，尝试连接指定 Wi-Fi。
+- 无参数时，使用设备最近保存的 Wi-Fi 配置。
+
+**Go API：**
+
+```go
+// 连接指定 Wi-Fi
+out, err := helper.Join(sfport, &mkpgo.JoinOption{
+    SSID:     "ssid",
+    Password: "password1234",
+})
+
+// 使用最近保存的 Wi-Fi 配置
+out, err = helper.Join(sfport, nil)
+```
+
+`Controller` 代理：
+
+```go
+out, err := ctrl.Join(&mkpgo.JoinOption{SSID: "ssid", Password: "password1234"})
+out, err = ctrl.Join(nil)
+```
+
+**解析器：** `RawDirective_join`
+
+- 输出类型：文本，非 JSON。
+- 结束标记：`cli>`。
+- 成功判断：输出包含 `connect: Connected`。
+- 失败判断：输出包含 `Command returned non-zero error code` / `error code` 时返回 `ErrRawDirecitveExecutionFailed`。
+
+成功输出示例：
+
+```text
+join ssid password1234
+I (29664) connect: Connecting to 'ssid'
+W (29664) wifi:Password length matches WPA2 standards, authmode threshold changes from OPEN to WPA2
+I (31648) esp_netif_handlers: sta ip: 192.168.71.79, mask: 255.255.255.0, gw: 192.168.71.1
+I (31648) connect: Connected
+cli>
+```
+
+失败输出示例：
+
+```text
+join ssid password1234
+I (8368) connect: Connecting to 'ssid'
+W (18376) connect: Connection timed out
+Command returned non-zero error code: 0x1 (ERROR)
+cli>
+```
+
+无参数成功输出示例：
+
+```text
+join
+I (736848) connect: Connecting to ''
+ssid ChinaNet-9Wfg pass password1234
+W (736856) wifi:Password length matches WPA2 standards, authmode threshold changes from OPEN to WPA2
+W (736856) wifi:sta is connected, disconnect before connecting to new ap
+I (736872) connect: Connected
+cli>
+```
 
 ### `alive`：心跳检测
 
@@ -596,6 +675,7 @@ err = sfport.Keypad(mkpgo.HidKpadReleaseAll)
 | `list_dir` | `RawDirective_list_dir` | 是 | `<EOF>` | JSON 文本 -> `FileSystem`；空内容返回空字符串。 |
 | `clean_dir` | `RawDirective_clean_dir` | 否 | `cli>` | 成功空返回；包含 `Failed to` 时返回错误。 |
 | `delete_file` | `RawDirective_delete_file` | 否 | `cli>` | 成功空返回；包含 `Failed to remove` 时返回错误。 |
+| `join` | `RawDirective_join` | 否 | `cli>` | 文本；成功需包含 `connect: Connected`，错误码输出返回执行失败。 |
 | `alive` | `RawDirective_alive` | 是 | `<EOF>` | JSON 文本 -> `Heartbeat`。 |
 | `atime` | `RawDirective_atime` | 是 | `<EOF>` | 查找包含 `"seconds"` 的 JSON 行 -> `LogLength`。 |
 | `aversion` | `RawDirective_aversion` | 是 | `<EOF>` | JSON 文本 -> `MKPVersion`。 |
@@ -650,6 +730,11 @@ type LogOption struct {
     } `json:"stpos"`
 }
 
+type JoinOption struct {
+    SSID     string `json:"ssid"`
+    Password string `json:"password"`
+}
+
 type LogInfo struct {
     LogOption
     LogLength
@@ -687,6 +772,7 @@ type LogInfo struct {
 | `ListDir` / `ListDirContext` | `list_dir` | `*FileSystem, error` |
 | `CleanDir` / `CleanDirContext` | `clean_dir` | `error` |
 | `DeleteFile` / `DeleteFileContext` | `delete_file` | `error` |
+| `Join` / `JoinContext` | `join` | `string, error` |
 | `Alive` / `AliveContext` | `alive` | `*Heartbeat, error` |
 | `Atime` / `AtimeContext` | `atime` | `*LogLength, error` |
 | `Aversion` / `AversionContext` | `aversion` | `*MKPVersion, error` |
@@ -705,7 +791,7 @@ type LogInfo struct {
 `controller.Controller` 封装了 helper 和键鼠高级操作：
 
 - 录制/回放：`StartRecord`、`StopRecord`、`Alog`、`Astop`、`Cancel`
-- 设备/文件：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Alive`、`Atime`、`Aversion`、`AInspect`
+- 设备/文件/网络：`DeviceSN`、`ListDir`、`CleanDir`、`DeleteFile`、`Join`、`Alive`、`Atime`、`Aversion`、`AInspect`
 - 键盘：`KeyDown`、`KeyUp`、`KeyTap`、`KeyPresses`、`KeypadRelease`、`KeypadReleaseAll`
 - 鼠标：`MouseClick`、`MouseClickWithOption`、`MouseScroll`、`MouseScrollWithOption`、`MouseScrollWithButton`、`MouseDown`、`MouseReleaseAll`、`MouseUp`、`M10Move`、`MouseMove`
 
@@ -734,4 +820,5 @@ type LogInfo struct {
 2. `useStates`：`1/0`；默认 `1`。`1` 表示恢复前使用 `apause` 保存的键鼠状态；`0` 表示直接恢复回放。
 
 备注：`apause` 保存的状态在 `alog`、`astop`、`acancel`、`aresume` 后直接清除。
+
 

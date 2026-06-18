@@ -106,6 +106,36 @@ func CancelContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error {
 	return sfport.CancelReplayContext(ctx)
 }
 
+// Join connects the device to Wi-Fi using join directive.
+// Join 使用 join 指令连接 Wi-Fi；opt 为 nil 或空时使用最近保存的 Wi-Fi 配置。
+func Join(sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption) (string, error) {
+	return JoinContext(context.Background(), sfport, opt)
+}
+
+// JoinContext connects the device to Wi-Fi using join directive with context.
+// JoinContext 使用 join 指令和 context 连接 Wi-Fi；opt 为 nil 或空时使用最近保存的 Wi-Fi 配置。
+func JoinContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption) (string, error) {
+	if !sfport.SyncOuputEnabled {
+		return "", errors.New("please enable sync mode first")
+	}
+
+	directive := "join"
+	if args := opt.CliArgs(); len(args) > 0 {
+		directive += " " + strings.Join(args, " ")
+	}
+
+	result, err := sfport.SendDirectiveContext(ctx, directive)
+	if err != nil {
+		return "", err
+	}
+
+	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
+		return parser.Parse(directive, result)
+	}
+
+	return "", mkpgo.ErrDirectiveParserMissing
+}
+
 // DeviceSN 指令 返回设备序列号
 func DeviceSN(sfport *mkpgo.SFSerialPort) (*mkpgo.SN, error) {
 	return DeviceSNContext(context.Background(), sfport)

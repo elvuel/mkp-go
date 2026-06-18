@@ -110,6 +110,11 @@ func (c *Controller) Cancel() error {
 	return helper.Cancel(c.sfport)
 }
 
+// helper func Join(sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption) (string, error)
+func (c *Controller) Join(opt *mkpgo.JoinOption) (string, error) {
+	return helper.Join(c.sfport, opt)
+}
+
 // helper func DeviceSN(sfport *mkpgo.SFSerialPort) (*mkpgo.SN, error)
 func (c *Controller) DeviceSN() (*mkpgo.SN, error) {
 	return helper.DeviceSN(c.sfport)
