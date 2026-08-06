@@ -176,6 +176,63 @@ func TestReadLogFileV2HeaderSkipsReservedBytes(t *testing.T) {
 	}
 }
 
+func TestHIDKeyTablesCanonicalAndCompatible(t *testing.T) {
+	scanCases := map[string]uint8{
+		"a":            0x04,
+		"A":            0x04,
+		"space":        0x2c,
+		"sysrq":        0x46,
+		"printscreen":  0x46,
+		"leftalt":      0xe2,
+		"LEFTMETA":     0xe3,
+		"media_calc":   0xfb,
+		"leftbracket":  0x2f,
+		"rightbracket": 0x30,
+	}
+	for name, want := range scanCases {
+		got, ok := ScanCode(name)
+		if !ok || got != want {
+			t.Fatalf("ScanCode(%q) = (%#x, %v), want (%#x, true)", name, got, ok, want)
+		}
+	}
+
+	if got := ScanName(0x46); got != "sysrq" {
+		t.Fatalf("ScanName(0x46) = %q, want sysrq", got)
+	}
+	if got := ScanName(0xe2); got != "leftalt" {
+		t.Fatalf("ScanName(0xe2) = %q, want leftalt", got)
+	}
+
+	modCases := map[string]uint8{
+		"lalt":     ModLAlt,
+		"mod_lalt": ModLAlt,
+		"ALT":      ModLAlt,
+		"LMETA":    ModLGUI,
+		"lgui":     ModLGUI,
+		"RGUI":     ModRGUI,
+		"mod_rgui": ModRGUI,
+	}
+	for name, want := range modCases {
+		got := ModBit(name)
+		if got != want {
+			t.Fatalf("ModBit(%q) = %#x, want %#x", name, got, want)
+		}
+	}
+
+	if !IsModName("rshift") || !IsModName("mod_rshift") {
+		t.Fatal("expected rshift/mod_rshift to be recognised as modifiers")
+	}
+	if !IsModName("mod_rgui") {
+		t.Fatal("expected mod_rgui to be accepted as a compatible modifier alias")
+	}
+	if IsModName("LEFTSHIFT") {
+		t.Fatal("LEFTSHIFT should be treated as an independent scan code, not a modifier")
+	}
+	if got := ModName(2); got != "lalt" {
+		t.Fatalf("ModName(2) = %q, want lalt", got)
+	}
+}
+
 // sameJSONFile returns true if two JSON files contain equivalent
 // Envelopes (byte-for-byte after canonical re-encoding).
 func sameJSONFile(a, b string) bool {
