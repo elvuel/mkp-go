@@ -9,7 +9,7 @@
 //
 // Mouse (port 1) payloads are 5-byte mouse reports (see mouse.go).
 // Keyboard (port 2) payloads are HID Boot Keyboard reports (8 bytes).
-package main
+package converter
 
 import (
 	"encoding/binary"

@@ -7,7 +7,7 @@
 //	  "meta":    { "width": N, "height": N, "startX": N, "startY": N },
 //	  "events":  [ { "MouseMove": {...} }, ... ]
 //	}
-package main
+package converter
 
 import (
 	"bytes"

@@ -3,7 +3,7 @@
 // Both conversions reproduce the firmware's state-machine behaviour
 // exactly, so log -> JSON -> log is replay-equivalent (see
 // docs/tool-log2json.md "Reversibility").
-package main
+package converter
 
 import (
 	"fmt"

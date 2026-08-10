@@ -3,7 +3,7 @@
 // Canonical names mirror the root package table in
 // ../../types_keycode_maps.go so log2json uses the same HID vocabulary
 // as the main mkp-go package.
-package main
+package converter
 
 import "strings"
 

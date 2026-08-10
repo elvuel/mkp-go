@@ -17,7 +17,7 @@
 //
 // Integration test runs on real firmware log files to confirm the
 // codec is wire-compatible with adumj's output.
-package main
+package converter
 
 import (
 	"bytes"

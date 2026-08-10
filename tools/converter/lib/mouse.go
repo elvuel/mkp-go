@@ -11,7 +11,7 @@
 // x and y are 12-bit signed values (range -2048..2047). See
 // player/main/applog_good/hidcodec.c (M10BuffEncode / M10BuffDecode)
 // for the authoritative C implementation.
-package main
+package converter
 
 import "fmt"
 

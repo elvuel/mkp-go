@@ -1,4 +1,4 @@
-// json2log - convert adumj/ajson2log JSON back to binary .log.
+// json2log - compatibility wrapper around tools/converter.
 //
 // Usage:
 //
@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	converter "redux-solutions.com/mousekeypadplayer/tools/converter/lib"
 )
 
 func main() {
@@ -25,6 +27,7 @@ func run() error {
 	outPath := flag.String("o", "", "output log file (default: same name with .log extension)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: json2log -f <input.json> [-o <output.log>]\n\n")
+		fmt.Fprintf(os.Stderr, "Compatibility wrapper around tools/converter.\n")
 		fmt.Fprintf(os.Stderr, "Convert firmware action JSON (.json) to binary applog (.log).\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
@@ -52,48 +55,11 @@ func run() error {
 		_ = os.MkdirAll(d, 0o755)
 	}
 
-	return convertJSONToLog(*inPath, out)
+	return converter.ConvertJSONFileToLogFile(*inPath, out)
 }
 
 // swapExt returns path with the extension replaced.
 func swapExt(path, newExt string) string {
 	base := path[:len(path)-len(filepath.Ext(path))]
 	return base + newExt
-}
-
-func convertLogToJSON(in, out string) error {
-	hdr, recs, err := ReadLogFile(in)
-	if err != nil {
-		return err
-	}
-	env := LogToJSON(hdr, recs)
-	if err := WriteJSONFile(out, env); err != nil {
-		return err
-	}
-	fmt.Printf("log -> json: %s (%d events)\n", out, len(env.Events))
-	return nil
-}
-
-func convertJSONToLog(in, out string) error {
-	env, err := ReadJSONFile(in)
-	if err != nil {
-		return err
-	}
-	hdr, recs, hasMouse, hasKbd, err := JSONToLog(env)
-	if err != nil {
-		return err
-	}
-	if err := WriteLogFile(out, hdr, recs, hasMouse, hasKbd); err != nil {
-		return err
-	}
-	fmt.Printf("json -> log: %s (version=%s, mouse=%d, kbd=%d)\n",
-		out, hdr.Version, boolToInt(hasMouse), boolToInt(hasKbd))
-	return nil
-}
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
