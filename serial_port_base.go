@@ -2,6 +2,7 @@ package mkpgo
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -38,19 +39,42 @@ type SerialPort struct {
 	// Internal synchronization and sync-output state.
 	// 内部并发锁与同步输出状态。
 	locker            sync.Mutex
+	directiveMu       sync.Mutex
 	syncStateMu       sync.RWMutex
 	SyncDirective     string
 	SyncOuputEnabled  bool `json:"sync_output_enabled"`
 	SyncOutputChan    chan string
 	SyncOutputTimeout time.Duration `json:"sync_output_timeout"`
 	SyncOutputIgnored bool          `json:"-"`
+	syncReplyCh       chan string
 
 	// Async marker used to drop one unrelated echo frame.
 	// 异步标记用于跳过一帧无关回显数据。
-	withAsyncMark bool
-	asyncMarkAt   time.Time
-	readerBuf     []byte
-	readClosed    bool `json:"-"`
+	withAsyncMark   bool
+	asyncMarkAt     time.Time
+	readerBuf       []byte
+	readClosed      bool      `json:"-"`
+	readLoopRunning bool      `json:"-"`
+	lastReadAt      time.Time `json:"-"`
+	lastReadErr     string    `json:"-"`
+	lastReadErrAt   time.Time `json:"-"`
+}
+
+// SerialPortStatus is a snapshot for health reporting.
+// SerialPortStatus 用于健康检查输出的串口状态快照。
+type SerialPortStatus struct {
+	Name                 string     `json:"name"`
+	PortOpen             bool       `json:"port_open"`
+	ReadClosed           bool       `json:"read_closed"`
+	ReadLoopRunning      bool       `json:"read_loop_running"`
+	SyncOutputEnabled    bool       `json:"sync_output_enabled"`
+	SyncOutputTimeoutMS  int64      `json:"sync_output_timeout_ms"`
+	CurrentSyncDirective string     `json:"current_sync_directive,omitempty"`
+	SyncOutputIgnored    bool       `json:"sync_output_ignored"`
+	AsyncMarked          bool       `json:"async_marked"`
+	LastReadAt           *time.Time `json:"last_read_at,omitempty"`
+	LastReadError        string     `json:"last_read_error,omitempty"`
+	LastReadErrorAt      *time.Time `json:"last_read_error_at,omitempty"`
 }
 
 // NewSerialPort creates an empty serial-port model.
@@ -131,8 +155,9 @@ func (sp *SerialPort) Read() (string, error) {
 
 		n, err := port.Read(sp.readerBuf)
 		if err != nil {
+			sp.noteReadError(err)
 			if strings.Contains(err.Error(), "Port has been closed") {
-				sp.readClosed = true
+				sp.setReadClosed(true)
 				if sp.Verbose {
 					log.Println("serial port closed")
 				}
@@ -145,6 +170,8 @@ func (sp *SerialPort) Read() (string, error) {
 		if n <= 0 {
 			continue
 		}
+
+		sp.noteReadActivity()
 
 		if sp.Verbose {
 			log.Printf("received data: %q\n", sp.readerBuf[:n])
@@ -159,7 +186,7 @@ func (sp *SerialPort) Read() (string, error) {
 			continue
 		}
 
-		syncDirective, syncOutputIgnored := sp.GetSyncDirectiveState()
+		syncDirective, syncOutputIgnored, syncReplyCh := sp.getSyncDirectiveState()
 		if syncDirective == "" {
 			continue
 		}
@@ -190,29 +217,67 @@ func (sp *SerialPort) Read() (string, error) {
 			output = string(resultCache[hittedIdx : hittedIdx+outputCompletedIdx])
 		}
 
-		sp.SyncOutputChan <- output
+		sp.deliverSyncOutput(output, syncReplyCh)
 		sp.EmptySyncDirective()
 		resultCache = resultCache[:0]
+	}
+}
+
+// ReadLoopContext keeps the serial read loop alive until the port is closed or ctx is canceled.
+// ReadLoopContext 持续维护串口读循环，直到端口关闭或 ctx 被取消。
+func (sp *SerialPort) ReadLoopContext(ctx context.Context) error {
+	const retryDelay = 200 * time.Millisecond
+	sp.setReadLoopRunning(true)
+	defer sp.setReadLoopRunning(false)
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		_, err := sp.Read()
+		if err == nil {
+			if !sp.hasOpenPort() {
+				return nil
+			}
+		} else {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if !sp.hasOpenPort() || sp.isReadClosed() {
+				return nil
+			}
+			log.Printf("serial read loop restarting after error: %v\n", err)
+		}
+
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 }
 
 // SetSyncDirective sets the current sync directive token and captures output.
 // SetSyncDirective 设置当前等待匹配的同步指令标记，并捕获输出。
 func (sp *SerialPort) SetSyncDirective(directive string) {
-	sp.setSyncDirective(directive, false)
+	sp.setSyncDirective(directive, false, nil)
 }
 
 // SetSyncDirectiveIgnoreOutput sets the current sync directive token and ignores its output.
 // SetSyncDirectiveIgnoreOutput 设置当前等待匹配的同步指令标记，但忽略输出内容。
 func (sp *SerialPort) SetSyncDirectiveIgnoreOutput(directive string) {
-	sp.setSyncDirective(directive, true)
+	sp.setSyncDirective(directive, true, nil)
 }
 
-func (sp *SerialPort) setSyncDirective(directive string, ignoreOutput bool) {
+func (sp *SerialPort) setSyncDirective(directive string, ignoreOutput bool, replyCh chan string) {
 	sp.syncStateMu.Lock()
 	defer sp.syncStateMu.Unlock()
 	sp.SyncDirective = directive
 	sp.SyncOutputIgnored = ignoreOutput
+	sp.syncReplyCh = replyCh
 }
 
 // GetSyncDirective gets current sync directive token.
@@ -225,15 +290,131 @@ func (sp *SerialPort) GetSyncDirective() string {
 // GetSyncDirectiveState gets current sync directive token and output-ignore flag.
 // GetSyncDirectiveState 获取当前同步指令标记与是否忽略输出。
 func (sp *SerialPort) GetSyncDirectiveState() (string, bool) {
+	syncDirective, syncOutputIgnored, _ := sp.getSyncDirectiveState()
+	return syncDirective, syncOutputIgnored
+}
+
+func (sp *SerialPort) getSyncDirectiveState() (string, bool, chan string) {
 	sp.syncStateMu.RLock()
 	defer sp.syncStateMu.RUnlock()
-	return sp.SyncDirective, sp.SyncOutputIgnored
+	return sp.SyncDirective, sp.SyncOutputIgnored, sp.syncReplyCh
 }
 
 // EmptySyncDirective clears sync directive token.
 // EmptySyncDirective 清空同步指令标记。
 func (sp *SerialPort) EmptySyncDirective() {
-	sp.setSyncDirective("", false)
+	sp.setSyncDirective("", false, nil)
+}
+
+func (sp *SerialPort) currentSyncOutputChan() chan string {
+	_, _, replyCh := sp.getSyncDirectiveState()
+	if replyCh != nil {
+		return replyCh
+	}
+	return sp.SyncOutputChan
+}
+
+func (sp *SerialPort) deliverSyncOutput(output string, replyCh chan string) {
+	if replyCh != nil {
+		select {
+		case replyCh <- output:
+		default:
+		}
+		return
+	}
+	if sp.SyncOutputChan == nil {
+		return
+	}
+	select {
+	case sp.SyncOutputChan <- output:
+		return
+	default:
+	}
+	select {
+	case <-sp.SyncOutputChan:
+	default:
+	}
+	select {
+	case sp.SyncOutputChan <- output:
+	default:
+	}
+}
+
+func (sp *SerialPort) hasOpenPort() bool {
+	sp.locker.Lock()
+	defer sp.locker.Unlock()
+	return sp.port != nil
+}
+
+func (sp *SerialPort) isReadClosed() bool {
+	sp.locker.Lock()
+	defer sp.locker.Unlock()
+	return sp.readClosed
+}
+
+func (sp *SerialPort) setReadLoopRunning(running bool) {
+	sp.locker.Lock()
+	defer sp.locker.Unlock()
+	sp.readLoopRunning = running
+}
+
+func (sp *SerialPort) noteReadActivity() {
+	sp.locker.Lock()
+	defer sp.locker.Unlock()
+	now := time.Now()
+	sp.lastReadAt = now
+	sp.lastReadErr = ""
+	sp.lastReadErrAt = time.Time{}
+}
+
+func (sp *SerialPort) noteReadError(err error) {
+	if err == nil {
+		return
+	}
+	sp.locker.Lock()
+	defer sp.locker.Unlock()
+	sp.lastReadErr = err.Error()
+	sp.lastReadErrAt = time.Now()
+}
+
+func (sp *SerialPort) setReadClosed(closed bool) {
+	sp.locker.Lock()
+	defer sp.locker.Unlock()
+	sp.readClosed = closed
+}
+
+// SnapshotStatus returns a concurrency-safe health snapshot.
+// SnapshotStatus 返回线程安全的健康状态快照。
+func (sp *SerialPort) SnapshotStatus() SerialPortStatus {
+	var status SerialPortStatus
+
+	sp.locker.Lock()
+	status = SerialPortStatus{
+		Name:                sp.Name,
+		PortOpen:            sp.port != nil,
+		ReadClosed:          sp.readClosed,
+		ReadLoopRunning:     sp.readLoopRunning,
+		SyncOutputTimeoutMS: sp.SyncOutputTimeout.Milliseconds(),
+		LastReadError:       sp.lastReadErr,
+	}
+	if !sp.lastReadAt.IsZero() {
+		lastReadAt := sp.lastReadAt
+		status.LastReadAt = &lastReadAt
+	}
+	if !sp.lastReadErrAt.IsZero() {
+		lastReadErrAt := sp.lastReadErrAt
+		status.LastReadErrorAt = &lastReadErrAt
+	}
+	sp.locker.Unlock()
+
+	sp.syncStateMu.RLock()
+	status.SyncOutputEnabled = sp.SyncOuputEnabled
+	status.CurrentSyncDirective = sp.SyncDirective
+	status.SyncOutputIgnored = sp.SyncOutputIgnored
+	status.AsyncMarked = sp.withAsyncMark
+	sp.syncStateMu.RUnlock()
+
+	return status
 }
 
 // EnableSyncOutput enables sync-output parsing mode.

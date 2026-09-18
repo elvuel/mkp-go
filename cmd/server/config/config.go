@@ -105,12 +105,21 @@ type FileDatabaseConfig struct {
 	Postgres PostgresDSN `json:"postgres,omitempty"`
 }
 
+type FileRuntimeConfig struct {
+	SyncDirectiveTimeoutMS  *int64 `json:"sync_directive_timeout_ms,omitempty"`
+	AsyncDirectiveTimeoutMS *int64 `json:"async_directive_timeout_ms,omitempty"`
+	DBTimeoutMS             *int64 `json:"db_timeout_ms,omitempty"`
+	ReplayCompletionGraceMS *int64 `json:"replay_completion_grace_ms,omitempty"`
+	ReplayMinimumDurationMS *int64 `json:"replay_minimum_duration_ms,omitempty"`
+}
+
 type FileConfig struct {
 	Mode     string             `json:"mode,omitempty"`
 	Port     string             `json:"port"`
 	SFPort   string             `json:"sf_port"`
 	JWT      FileAuthConfig     `json:"jwt"`
 	Database FileDatabaseConfig `json:"database"`
+	Runtime  FileRuntimeConfig  `json:"runtime,omitempty"`
 }
 
 type DatabaseConfig struct {
@@ -131,6 +140,15 @@ type AppConfig struct {
 	SFPort   string
 	Auth     AuthConfig
 	Database DatabaseConfig
+	Runtime  RuntimeConfig
+}
+
+type RuntimeConfig struct {
+	SyncDirectiveTimeout  time.Duration
+	AsyncDirectiveTimeout time.Duration
+	DBTimeout             time.Duration
+	ReplayCompletionGrace time.Duration
+	ReplayMinimumDuration time.Duration
 }
 
 const (
@@ -147,6 +165,12 @@ const (
 	defaultPostgresMaxOpenConns = 50
 	defaultPostgresConnMaxIdleS = int64(300)  // 5m
 	defaultPostgresConnMaxLifeS = int64(1800) // 30m
+
+	defaultSyncDirectiveTimeoutMS  = int64(10000)
+	defaultAsyncDirectiveTimeoutMS = int64(3000)
+	defaultDBTimeoutMS             = int64(5000)
+	defaultReplayCompletionGraceMS = int64(1500)
+	defaultReplayMinimumDurationMS = int64(1000)
 )
 
 func Load(cliPath string) (AppConfig, string, error) {
@@ -161,9 +185,40 @@ func Load(cliPath string) (AppConfig, string, error) {
 		SFPort:   firstNonEmpty(os.Getenv("SF_PORT"), fileCfg.SFPort),
 		Auth:     composeAuthConfig(fileCfg),
 		Database: composeDatabaseConfig(fileCfg),
+		Runtime:  composeRuntimeConfig(fileCfg),
 	}
 
 	return cfg, loadedPath, nil
+}
+
+func DefaultRuntimeConfig() RuntimeConfig {
+	return RuntimeConfig{
+		SyncDirectiveTimeout:  time.Duration(defaultSyncDirectiveTimeoutMS) * time.Millisecond,
+		AsyncDirectiveTimeout: time.Duration(defaultAsyncDirectiveTimeoutMS) * time.Millisecond,
+		DBTimeout:             time.Duration(defaultDBTimeoutMS) * time.Millisecond,
+		ReplayCompletionGrace: time.Duration(defaultReplayCompletionGraceMS) * time.Millisecond,
+		ReplayMinimumDuration: time.Duration(defaultReplayMinimumDurationMS) * time.Millisecond,
+	}
+}
+
+func NormalizeRuntimeConfig(cfg RuntimeConfig) RuntimeConfig {
+	defaults := DefaultRuntimeConfig()
+	if cfg.SyncDirectiveTimeout <= 0 {
+		cfg.SyncDirectiveTimeout = defaults.SyncDirectiveTimeout
+	}
+	if cfg.AsyncDirectiveTimeout <= 0 {
+		cfg.AsyncDirectiveTimeout = defaults.AsyncDirectiveTimeout
+	}
+	if cfg.DBTimeout <= 0 {
+		cfg.DBTimeout = defaults.DBTimeout
+	}
+	if cfg.ReplayCompletionGrace <= 0 {
+		cfg.ReplayCompletionGrace = defaults.ReplayCompletionGrace
+	}
+	if cfg.ReplayMinimumDuration <= 0 {
+		cfg.ReplayMinimumDuration = defaults.ReplayMinimumDuration
+	}
+	return cfg
 }
 
 func resolveRunMode(fileMode string) string {
@@ -257,6 +312,37 @@ func composeDatabaseConfig(fileCfg FileConfig) DatabaseConfig {
 
 	applyRecommendedPoolDefaults(&cfg)
 	return cfg
+}
+
+func composeRuntimeConfig(fileCfg FileConfig) RuntimeConfig {
+	cfg := RuntimeConfig{
+		SyncDirectiveTimeout: time.Duration(firstPositiveInt64(
+			parsePositiveInt64Ptr(os.Getenv("MKP_SYNC_DIRECTIVE_TIMEOUT_MS")),
+			fileCfg.Runtime.SyncDirectiveTimeoutMS,
+			int64Ptr(defaultSyncDirectiveTimeoutMS),
+		)) * time.Millisecond,
+		AsyncDirectiveTimeout: time.Duration(firstPositiveInt64(
+			parsePositiveInt64Ptr(os.Getenv("MKP_ASYNC_DIRECTIVE_TIMEOUT_MS")),
+			fileCfg.Runtime.AsyncDirectiveTimeoutMS,
+			int64Ptr(defaultAsyncDirectiveTimeoutMS),
+		)) * time.Millisecond,
+		DBTimeout: time.Duration(firstPositiveInt64(
+			parsePositiveInt64Ptr(os.Getenv("MKP_DB_TIMEOUT_MS")),
+			fileCfg.Runtime.DBTimeoutMS,
+			int64Ptr(defaultDBTimeoutMS),
+		)) * time.Millisecond,
+		ReplayCompletionGrace: time.Duration(firstPositiveInt64(
+			parsePositiveInt64Ptr(os.Getenv("MKP_REPLAY_COMPLETION_GRACE_MS")),
+			fileCfg.Runtime.ReplayCompletionGraceMS,
+			int64Ptr(defaultReplayCompletionGraceMS),
+		)) * time.Millisecond,
+		ReplayMinimumDuration: time.Duration(firstPositiveInt64(
+			parsePositiveInt64Ptr(os.Getenv("MKP_REPLAY_MIN_DURATION_MS")),
+			fileCfg.Runtime.ReplayMinimumDurationMS,
+			int64Ptr(defaultReplayMinimumDurationMS),
+		)) * time.Millisecond,
+	}
+	return NormalizeRuntimeConfig(cfg)
 }
 
 func applyRecommendedPoolDefaults(cfg *DatabaseConfig) {
@@ -474,6 +560,27 @@ func parsePositiveInt(raw string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func parsePositiveInt64Ptr(raw string) *int64 {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	parsed, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil || parsed <= 0 {
+		return nil
+	}
+	return &parsed
+}
+
+func firstPositiveInt64(values ...*int64) int64 {
+	for _, value := range values {
+		if value != nil && *value > 0 {
+			return *value
+		}
+	}
+	return 0
 }
 
 func firstNonEmpty(values ...string) string {

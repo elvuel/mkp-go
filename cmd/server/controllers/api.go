@@ -1,8 +1,10 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -20,7 +22,10 @@ import (
 	servercfg "github.com/elvuel/mkp-go/cmd/server/config"
 	"github.com/elvuel/mkp-go/cmd/server/models"
 	mkpcontroller "github.com/elvuel/mkp-go/controller"
-	"github.com/elvuel/mkp-go/helper"
+)
+
+const (
+	serialSyncTimeoutGrace = 2 * time.Second
 )
 
 type API struct {
@@ -28,18 +33,24 @@ type API struct {
 	sfport  *mkpgo.SFSerialPort
 	auth    servercfg.AuthConfig
 	db      *gorm.DB
+	runtime servercfg.RuntimeConfig
 	version string
 
 	alogMu        sync.Mutex
 	alogRunning   bool
+	alogStarted   bool
 	currentAlogID string
 	currentAlog   *alogSession
 
 	replayMu        sync.Mutex
 	replayRunning   bool
 	currentReplayID string
+	replayStartedAt time.Time
 	replayDoneAt    time.Time
+	replayReleaseAt time.Time
 	replayTimer     *time.Timer
+
+	readLoopCancel context.CancelFunc
 }
 
 type alogSession struct {
@@ -95,27 +106,48 @@ func (r alogRequest) logOption() *mkpgo.LogOption {
 	return opt
 }
 
-func NewAPI(sfportName string, auth servercfg.AuthConfig, db *gorm.DB, version string) (*API, error) {
+func NewAPI(sfportName string, auth servercfg.AuthConfig, db *gorm.DB, runtimeCfg servercfg.RuntimeConfig, version string) (*API, error) {
+	runtimeCfg = servercfg.NormalizeRuntimeConfig(runtimeCfg)
+
 	sfport := mkpgo.NewSFSerialPort()
 	sfport.SyncOuputEnabled = true
 	sfport.Name = sfportName
+	sfport.SyncOutputTimeout = runtimeCfg.SyncDirectiveTimeout
 	if err := sfport.Open(); err != nil {
 		return nil, err
 	}
-	go sfport.Read()
+	readLoopCtx, readLoopCancel := context.WithCancel(context.Background())
+	go func() {
+		_ = sfport.ReadLoopContext(readLoopCtx)
+	}()
 
 	sfport.StopRecording()
 
+	log.Printf(
+		"api initialized: sf_port=%s sync_timeout=%s async_timeout=%s db_timeout=%s replay_grace=%s replay_min_duration=%s",
+		sfportName,
+		runtimeCfg.SyncDirectiveTimeout,
+		runtimeCfg.AsyncDirectiveTimeout,
+		runtimeCfg.DBTimeout,
+		runtimeCfg.ReplayCompletionGrace,
+		runtimeCfg.ReplayMinimumDuration,
+	)
+
 	return &API{
-		mkpCtrl: mkpcontroller.NewController(sfport),
-		sfport:  sfport,
-		auth:    auth,
-		db:      db,
-		version: strings.TrimSpace(version),
+		mkpCtrl:        mkpcontroller.NewController(sfport),
+		sfport:         sfport,
+		auth:           auth,
+		db:             db,
+		runtime:        runtimeCfg,
+		version:        strings.TrimSpace(version),
+		readLoopCancel: readLoopCancel,
 	}, nil
 }
 
 func (a *API) Close() {
+	if a.readLoopCancel != nil {
+		a.readLoopCancel()
+	}
 	if a.sfport != nil {
 		_ = a.sfport.Close()
 	}
@@ -133,9 +165,49 @@ func (a *API) RegisterRoutes(router *gin.Engine) {
 	protected.GET("/list", a.handleList)
 	protected.GET("/records/:id", a.handleGetRecord)
 	protected.DELETE("/records/:id", a.handleDeleteRecord)
+	protected.GET("/replay/status", a.handleReplayStatus)
 	protected.POST("/aplay/:id", a.handleAplay)
+	protected.POST("/acancel", a.handleAcancel)
 	protected.POST("/alog", a.handleAlog)
 	protected.POST("/astop", a.handleAstop)
+}
+
+func (a *API) HandleHealth(c *gin.Context) {
+	serialReady := false
+	var serialStatus *mkpgo.SerialPortStatus
+	if a.sfport != nil {
+		snapshot := a.sfport.SnapshotStatus()
+		serialStatus = &snapshot
+		serialReady = snapshot.PortOpen && snapshot.ReadLoopRunning && !snapshot.ReadClosed
+	}
+
+	alog := a.snapshotAlogState()
+	replay := a.snapshotReplayState()
+	dbReady := a.db != nil
+	ready := serialReady && dbReady
+	status := "up"
+	if !ready {
+		status = "degraded"
+		log.Printf("health degraded: ready=%t serial_ready=%t db_ready=%t serial=%+v alog=%+v replay=%+v", ready, serialReady, dbReady, serialStatus, alog, replay)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":       true,
+		"status":   status,
+		"ready":    ready,
+		"db_ready": dbReady,
+		"serial":   serialStatus,
+		"alog":     alog,
+		"replay":   replay,
+	})
+}
+
+func (a *API) handleReplayStatus(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"ok":        true,
+		"directive": "replay_status",
+		"replay":    a.snapshotReplayState(),
+	})
 }
 
 func (a *API) handleVersion(c *gin.Context) {
@@ -147,7 +219,10 @@ func (a *API) handleVersion(c *gin.Context) {
 		return
 	}
 
-	mkpVersion, err := helper.Aversion(a.sfport)
+	ctx, cancel := a.newSyncDirectiveContext(c.Request.Context())
+	defer cancel()
+
+	mkpVersion, err := a.mkpCtrl.AversionContext(ctx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":    false,
@@ -246,17 +321,11 @@ func (a *API) handleToken(c *gin.Context) {
 }
 
 func (a *API) handleAlog(c *gin.Context) {
+	ctx, cancel := a.newSyncDirectiveContext(c.Request.Context())
+	defer cancel()
 	var req alogRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
-		return
-	}
-
-	a.alogMu.Lock()
-	defer a.alogMu.Unlock()
-
-	if a.alogRunning {
-		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "alog is already running"})
 		return
 	}
 
@@ -281,20 +350,11 @@ func (a *API) handleAlog(c *gin.Context) {
 	req.StPosX = &startPointX
 	req.StPosY = &startPointY
 
-	robotgo.Move(startPointX, startPointY)
-
 	if req.Width <= 0 || req.Height <= 0 {
 		req.Width, req.Height = robotgo.GetScreenSize()
 	}
 
-	if _, err := a.mkpCtrl.Alog(alogID, req.logOption()); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
-		return
-	}
-
-	a.alogRunning = true
-	a.currentAlogID = alogID
-	a.currentAlog = &alogSession{
+	session := &alogSession{
 		Name:         req.LogName,
 		UniqueID:     alogID,
 		MKPPath:      a.mkpCtrl.ComposeLogFullpath(alogID),
@@ -304,6 +364,54 @@ func (a *API) handleAlog(c *gin.Context) {
 		ScreenHeight: req.Height,
 		OS:           runtime.GOOS,
 	}
+
+	log.Printf(
+		"alog requested: id=%s name=%q start=(%d,%d) size=%dx%d",
+		alogID,
+		req.LogName,
+		startPointX,
+		startPointY,
+		req.Width,
+		req.Height,
+	)
+
+	a.alogMu.Lock()
+	if a.alogRunning {
+		runningID := a.currentAlogID
+		a.alogMu.Unlock()
+		log.Printf("alog rejected: existing session still running current_id=%s requested_id=%s", runningID, alogID)
+		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "alog is already running"})
+		return
+	}
+	a.alogRunning = true
+	a.alogStarted = false
+	a.currentAlogID = alogID
+	a.currentAlog = session
+	a.alogMu.Unlock()
+
+	robotgo.Move(startPointX, startPointY)
+
+	if _, err := a.mkpCtrl.AlogContext(ctx, alogID, req.logOption()); err != nil {
+		a.alogMu.Lock()
+		if a.currentAlogID == alogID {
+			a.alogRunning = false
+			a.alogStarted = false
+			a.currentAlogID = ""
+			a.currentAlog = nil
+		}
+		a.alogMu.Unlock()
+		log.Printf("alog failed: id=%s name=%q err=%v", alogID, req.LogName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+
+	a.alogMu.Lock()
+	if a.currentAlogID == alogID {
+		a.alogStarted = true
+	}
+	a.alogMu.Unlock()
+
+	log.Printf("alog started: id=%s name=%q mkp_path=%s", alogID, req.LogName, session.MKPPath)
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok":        true,
@@ -315,15 +423,20 @@ func (a *API) handleAlog(c *gin.Context) {
 }
 
 func (a *API) handleAstop(c *gin.Context) {
-	a.alogMu.Lock()
-	defer a.alogMu.Unlock()
+	ctx, cancel := a.newAsyncDirectiveContext(c.Request.Context())
+	defer cancel()
 
-	if err := a.mkpCtrl.StopRecord(); err != nil {
+	log.Printf("astop requested")
+	if err := a.mkpCtrl.StopRecordContext(ctx); err != nil {
+		log.Printf("astop failed to send: err=%v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
 
+	a.alogMu.Lock()
 	if !a.alogRunning {
+		a.alogMu.Unlock()
+		log.Printf("astop sent without active alog session")
 		c.JSON(http.StatusOK, gin.H{
 			"ok":        true,
 			"directive": "astop",
@@ -333,10 +446,13 @@ func (a *API) handleAstop(c *gin.Context) {
 	}
 
 	stoppedID := a.currentAlogID
+	stoppedStarted := a.alogStarted
 	stoppedSession := a.currentAlog
 	a.alogRunning = false
+	a.alogStarted = false
 	a.currentAlogID = ""
 	a.currentAlog = nil
+	a.alogMu.Unlock()
 
 	resp := gin.H{
 		"ok":        true,
@@ -344,15 +460,24 @@ func (a *API) handleAstop(c *gin.Context) {
 		"id":        stoppedID,
 		"status":    "stopped",
 	}
-	if stoppedSession != nil {
-		if record, err := a.persistMacroRecord(stoppedSession); err != nil {
+	if stoppedSession != nil && stoppedStarted {
+		dbCtx, dbCancel := a.newDBContext(c.Request.Context())
+		defer dbCancel()
+		if record, err := a.persistMacroRecord(dbCtx, stoppedSession); err != nil {
+			log.Printf("astop completed but persist failed: id=%s err=%v", stoppedID, err)
 			resp["persisted"] = false
 			resp["persist_error"] = err.Error()
 		} else {
+			log.Printf("astop completed: id=%s persisted=true macro_record_id=%d", stoppedID, record.ID)
 			resp["persisted"] = true
 			resp["macro_record_id"] = record.ID
 		}
+	} else if stoppedSession != nil {
+		log.Printf("astop completed: id=%s persisted=false reason=alog session was not fully started", stoppedID)
+		resp["persisted"] = false
+		resp["persist_error"] = "alog session was not fully started"
 	} else {
+		log.Printf("astop completed: persisted=false reason=missing alog session state")
 		resp["persisted"] = false
 		resp["persist_error"] = "missing alog session state"
 	}
@@ -360,6 +485,8 @@ func (a *API) handleAstop(c *gin.Context) {
 }
 
 func (a *API) handleList(c *gin.Context) {
+	ctx, cancel := a.newDBContext(c.Request.Context())
+	defer cancel()
 	limits := 10
 	if raw := strings.TrimSpace(c.Query("limits")); raw != "" {
 		parsed, err := strconv.Atoi(raw)
@@ -382,7 +509,7 @@ func (a *API) handleList(c *gin.Context) {
 		return
 	}
 
-	query := a.db
+	query := a.db.WithContext(ctx)
 	if nameFilter != "" {
 		query = query.Where("name LIKE ?", "%"+nameFilter+"%")
 	}
@@ -410,6 +537,8 @@ func (a *API) handleList(c *gin.Context) {
 }
 
 func (a *API) handleGetRecord(c *gin.Context) {
+	ctx, cancel := a.newDBContext(c.Request.Context())
+	defer cancel()
 	if a.db == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":    false,
@@ -428,7 +557,7 @@ func (a *API) handleGetRecord(c *gin.Context) {
 	}
 
 	var record models.MacroRecord
-	if err := a.db.Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
+	if err := a.db.WithContext(ctx).Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"ok":    false,
@@ -451,6 +580,8 @@ func (a *API) handleGetRecord(c *gin.Context) {
 }
 
 func (a *API) handleDeleteRecord(c *gin.Context) {
+	ctx, cancel := a.newDBContext(c.Request.Context())
+	defer cancel()
 	if a.db == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":    false,
@@ -469,7 +600,7 @@ func (a *API) handleDeleteRecord(c *gin.Context) {
 	}
 
 	var record models.MacroRecord
-	if err := a.db.Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
+	if err := a.db.WithContext(ctx).Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"ok":    false,
@@ -485,13 +616,17 @@ func (a *API) handleDeleteRecord(c *gin.Context) {
 	}
 
 	a.replayMu.Lock()
-	isReplaying := a.replayRunning && a.currentReplayID == record.UniqueID && time.Now().Before(a.replayDoneAt)
+	isReplaying, retryAfter := a.isReplayBlockingLocked(time.Now(), record.UniqueID)
 	a.replayMu.Unlock()
 	if isReplaying {
-		c.JSON(http.StatusConflict, gin.H{
+		resp := gin.H{
 			"ok":    false,
 			"error": "record is currently being replayed",
-		})
+		}
+		if retryAfter > 0 {
+			resp["retry_after_seconds"] = int(retryAfter.Seconds()) + 1
+		}
+		c.JSON(http.StatusConflict, resp)
 		return
 	}
 
@@ -502,7 +637,9 @@ func (a *API) handleDeleteRecord(c *gin.Context) {
 	}
 
 	if record.MKPPath != "" {
-		if err := a.mkpCtrl.DeleteFile(record.MKPPath); err != nil {
+		serialCtx, serialCancel := a.newSyncDirectiveContext(c.Request.Context())
+		defer serialCancel()
+		if err := a.mkpCtrl.DeleteFileContext(serialCtx, record.MKPPath); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"ok":    false,
 				"error": err.Error(),
@@ -512,7 +649,7 @@ func (a *API) handleDeleteRecord(c *gin.Context) {
 		resp["file_deleted"] = true
 	}
 
-	if err := a.db.Delete(&record).Error; err != nil {
+	if err := a.db.WithContext(ctx).Delete(&record).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":    false,
 			"error": err.Error(),
@@ -524,6 +661,8 @@ func (a *API) handleDeleteRecord(c *gin.Context) {
 }
 
 func (a *API) handleAplay(c *gin.Context) {
+	dbCtx, dbCancel := a.newDBContext(c.Request.Context())
+	defer dbCancel()
 	if a.db == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":    false,
@@ -534,24 +673,21 @@ func (a *API) handleAplay(c *gin.Context) {
 
 	a.replayMu.Lock()
 	if a.replayRunning {
-		if time.Now().Before(a.replayDoneAt) {
-			remaining := time.Until(a.replayDoneAt)
+		if blocking, remaining := a.isReplayBlockingLocked(time.Now(), ""); blocking {
+			currentID := a.currentReplayID
 			a.replayMu.Unlock()
+			log.Printf("aplay rejected: current_replay_id=%s retry_after=%s", currentID, remaining)
 			c.JSON(http.StatusConflict, gin.H{
 				"ok":                  false,
 				"error":               "replay is already running",
 				"retry_after_seconds": int(remaining.Seconds()) + 1,
+				"estimated_done_at":   a.replayDoneAt,
+				"release_after":       a.replayReleaseAt,
 			})
 			return
 		}
 
-		a.replayRunning = false
-		a.currentReplayID = ""
-		a.replayDoneAt = time.Time{}
-		if a.replayTimer != nil {
-			a.replayTimer.Stop()
-			a.replayTimer = nil
-		}
+		a.resetReplayStateLocked()
 	}
 	a.replayMu.Unlock()
 
@@ -564,8 +700,10 @@ func (a *API) handleAplay(c *gin.Context) {
 		return
 	}
 
+	log.Printf("aplay requested: id=%s", rawUniqueID)
+
 	var record models.MacroRecord
-	if err := a.db.Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
+	if err := a.db.WithContext(dbCtx).Where("unique_id = ?", rawUniqueID).First(&record).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{
 				"ok":    false,
@@ -586,7 +724,10 @@ func (a *API) handleAplay(c *gin.Context) {
 		robotgo.Move(0, 0)
 	}
 
-	if err := a.sfport.StartReplaying(record.MKPPath, -1); err != nil {
+	serialCtx, serialCancel := a.newAsyncDirectiveContext(c.Request.Context())
+	defer serialCancel()
+	if err := a.sfport.StartReplayingContext(serialCtx, record.MKPPath, -1); err != nil {
+		log.Printf("aplay failed: id=%s path=%s err=%v", record.UniqueID, record.MKPPath, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":    false,
 			"error": err.Error(),
@@ -594,42 +735,70 @@ func (a *API) handleAplay(c *gin.Context) {
 		return
 	}
 
-	timeoutSeconds := record.Seconds + 1
-	if timeoutSeconds < 1 {
-		timeoutSeconds = 1
-	}
-	finishAt := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
+	startedAt := time.Now()
+	finishAt, releaseAt := a.replayWindowForRecord(record, startedAt)
 
 	a.replayMu.Lock()
 	a.replayRunning = true
 	a.currentReplayID = record.UniqueID
+	a.replayStartedAt = startedAt
 	a.replayDoneAt = finishAt
+	a.replayReleaseAt = releaseAt
 	if a.replayTimer != nil {
 		a.replayTimer.Stop()
 	}
 	replayID := record.UniqueID
-	a.replayTimer = time.AfterFunc(time.Until(finishAt), func() {
+	a.replayTimer = time.AfterFunc(time.Until(releaseAt), func() {
 		a.replayMu.Lock()
 		defer a.replayMu.Unlock()
 		if a.currentReplayID == replayID {
-			a.replayRunning = false
-			a.currentReplayID = ""
-			a.replayDoneAt = time.Time{}
-			a.replayTimer = nil
+			a.resetReplayStateLocked()
 		}
 	})
 	a.replayMu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{
-		"ok":        true,
-		"directive": "aplay",
-		"id":        record.UniqueID,
-		"mkp_path":  record.MKPPath,
-		"status":    "started",
+		"ok":                true,
+		"directive":         "aplay",
+		"id":                record.UniqueID,
+		"mkp_path":          record.MKPPath,
+		"status":            "started",
+		"estimated_done_at": finishAt,
+		"release_after":     releaseAt,
+	})
+
+	log.Printf("aplay started: id=%s path=%s estimated_done_at=%s release_after=%s", record.UniqueID, record.MKPPath, finishAt.Format(time.RFC3339Nano), releaseAt.Format(time.RFC3339Nano))
+}
+
+func (a *API) handleAcancel(c *gin.Context) {
+	ctx, cancel := a.newAsyncDirectiveContext(c.Request.Context())
+	defer cancel()
+
+	log.Printf("acancel requested")
+	if err := a.mkpCtrl.CancelContext(ctx); err != nil {
+		log.Printf("acancel failed: err=%v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+
+	a.replayMu.Lock()
+	canceledID := a.currentReplayID
+	wasRunning := a.replayRunning
+	a.resetReplayStateLocked()
+	a.replayMu.Unlock()
+
+	log.Printf("acancel sent: id=%s was_running=%t", canceledID, wasRunning)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":          true,
+		"directive":   "acancel",
+		"id":          canceledID,
+		"was_running": wasRunning,
+		"status":      "cancel_sent",
 	})
 }
 
-func (a *API) persistMacroRecord(session *alogSession) (*models.MacroRecord, error) {
+func (a *API) persistMacroRecord(ctx context.Context, session *alogSession) (*models.MacroRecord, error) {
 	if a.db == nil {
 		return nil, fmt.Errorf("database is not initialized")
 	}
@@ -645,13 +814,114 @@ func (a *API) persistMacroRecord(session *alogSession) (*models.MacroRecord, err
 		OS:           session.OS,
 	}
 
-	logLength, err := a.mkpCtrl.Atime(session.MKPPath)
+	logLength, err := a.mkpCtrl.AtimeContext(ctx, session.MKPPath)
 	if err == nil && logLength != nil {
 		record.Seconds = logLength.Seconds
 		record.Milliseconds = logLength.Milliseconds
 	}
-	if err := a.db.Create(record).Error; err != nil {
+	if err := a.db.WithContext(ctx).Create(record).Error; err != nil {
 		return nil, err
 	}
 	return record, nil
+}
+
+func (a *API) runtimeConfig() servercfg.RuntimeConfig {
+	return servercfg.NormalizeRuntimeConfig(a.runtime)
+}
+
+func (a *API) newSyncDirectiveContext(parent context.Context) (context.Context, context.CancelFunc) {
+	timeout := a.runtimeConfig().SyncDirectiveTimeout + serialSyncTimeoutGrace
+	if a.sfport != nil && a.sfport.SyncOutputTimeout > 0 {
+		timeout = a.sfport.SyncOutputTimeout + serialSyncTimeoutGrace
+	}
+	return withTimeoutIfNone(parent, timeout)
+}
+
+func (a *API) newAsyncDirectiveContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return withTimeoutIfNone(parent, a.runtimeConfig().AsyncDirectiveTimeout)
+}
+
+func (a *API) newDBContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return withTimeoutIfNone(parent, a.runtimeConfig().DBTimeout)
+}
+
+func withTimeoutIfNone(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return parent, func() {}
+	}
+	if _, hasDeadline := parent.Deadline(); hasDeadline {
+		return parent, func() {}
+	}
+	return context.WithTimeout(parent, timeout)
+}
+
+func (a *API) replayWindowForRecord(record models.MacroRecord, startedAt time.Time) (time.Time, time.Time) {
+	runtimeCfg := a.runtimeConfig()
+	duration := time.Duration(record.Seconds)*time.Second + time.Duration(record.Milliseconds)*time.Millisecond
+	if duration < runtimeCfg.ReplayMinimumDuration {
+		duration = runtimeCfg.ReplayMinimumDuration
+	}
+	finishAt := startedAt.Add(duration)
+	return finishAt, finishAt.Add(runtimeCfg.ReplayCompletionGrace)
+}
+
+func (a *API) resetReplayStateLocked() {
+	a.replayRunning = false
+	a.currentReplayID = ""
+	a.replayStartedAt = time.Time{}
+	a.replayDoneAt = time.Time{}
+	a.replayReleaseAt = time.Time{}
+	if a.replayTimer != nil {
+		a.replayTimer.Stop()
+		a.replayTimer = nil
+	}
+}
+
+func (a *API) isReplayBlockingLocked(now time.Time, recordID string) (bool, time.Duration) {
+	if !a.replayRunning {
+		return false, 0
+	}
+	if recordID != "" && a.currentReplayID != "" && a.currentReplayID != recordID {
+		return false, 0
+	}
+	if !a.replayReleaseAt.IsZero() && now.Before(a.replayReleaseAt) {
+		return true, time.Until(a.replayReleaseAt)
+	}
+	return false, 0
+}
+
+func (a *API) snapshotAlogState() gin.H {
+	a.alogMu.Lock()
+	defer a.alogMu.Unlock()
+	return gin.H{
+		"running":    a.alogRunning,
+		"started":    a.alogStarted,
+		"current_id": a.currentAlogID,
+	}
+}
+
+func (a *API) snapshotReplayState() gin.H {
+	now := time.Now()
+	a.replayMu.Lock()
+	defer a.replayMu.Unlock()
+	blocking, retryAfter := a.isReplayBlockingLocked(now, "")
+	state := gin.H{
+		"running":           a.replayRunning,
+		"current_id":        a.currentReplayID,
+		"started_at":        zeroTimeToNil(a.replayStartedAt),
+		"estimated_done_at": zeroTimeToNil(a.replayDoneAt),
+		"release_after":     zeroTimeToNil(a.replayReleaseAt),
+		"active":            blocking,
+	}
+	if retryAfter > 0 {
+		state["retry_after_seconds"] = int(retryAfter.Seconds()) + 1
+	}
+	return state
+}
+
+func zeroTimeToNil(t time.Time) interface{} {
+	if t.IsZero() {
+		return nil
+	}
+	return t
 }

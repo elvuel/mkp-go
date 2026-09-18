@@ -112,6 +112,9 @@ func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive stri
 
 	cfg := applyDirectiveOptions(opts...)
 
+	sp.directiveMu.Lock()
+	defer sp.directiveMu.Unlock()
+
 	sp.locker.Lock()
 
 	if sp.VerboseDirective {
@@ -124,11 +127,12 @@ func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive stri
 	if sp.IsSyncOutputEnabled() {
 		sp.clearAsyncMark()
 		sp.EmptySyncDirective()
+		replyCh := make(chan string, 1)
 		syncDirective := normalizeSFSyncDirective(directive)
 		if ignoreOutput {
-			sp.SetSyncDirectiveIgnoreOutput(syncDirective)
+			sp.setSyncDirective(syncDirective, true, replyCh)
 		} else {
-			sp.SetSyncDirective(syncDirective)
+			sp.setSyncDirective(syncDirective, false, replyCh)
 		}
 		_, err := sp.Write([]byte(directive + "\r\n"))
 		if err != nil {
@@ -139,7 +143,7 @@ func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive stri
 		}
 
 		sp.locker.Unlock()
-		return sp.getSyncOutputContext(ctx, sp.resolveDirectiveSyncOutputTimeout(cfg))
+		return sp.waitSyncOutputContext(ctx, sp.resolveDirectiveSyncOutputTimeout(cfg), replyCh)
 	}
 
 	_, err := sp.Write([]byte(directive + "\r\n"))
@@ -166,6 +170,9 @@ func (sp *SFSerialPort) SendDirectiveAsyncContext(ctx context.Context, directive
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
+	sp.directiveMu.Lock()
+	defer sp.directiveMu.Unlock()
 
 	sp.locker.Lock()
 	defer sp.locker.Unlock()
@@ -212,12 +219,16 @@ func (sp *SFSerialPort) resolveDirectiveSyncOutputTimeout(opt DirectiveOptions) 
 }
 
 func (sp *SFSerialPort) getSyncOutputContext(ctx context.Context, timeout time.Duration) (string, error) {
+	return sp.waitSyncOutputContext(ctx, timeout, sp.currentSyncOutputChan())
+}
+
+func (sp *SFSerialPort) waitSyncOutputContext(ctx context.Context, timeout time.Duration, waitCh chan string) (string, error) {
 	if timeout > 0 {
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 
 		select {
-		case output := <-sp.SyncOutputChan:
+		case output := <-waitCh:
 			return output, nil
 		case <-ctx.Done():
 			sp.EmptySyncDirective()
@@ -229,7 +240,7 @@ func (sp *SFSerialPort) getSyncOutputContext(ctx context.Context, timeout time.D
 	}
 
 	select {
-	case output := <-sp.SyncOutputChan:
+	case output := <-waitCh:
 		return output, nil
 	case <-ctx.Done():
 		sp.EmptySyncDirective()

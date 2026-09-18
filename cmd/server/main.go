@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -52,7 +52,7 @@ func main() {
 		log.Fatalf("failed to initialize database: %v", err)
 	}
 
-	api, err := controllers.NewAPI(sfportName, appCfg.Auth, db, Version)
+	api, err := controllers.NewAPI(sfportName, appCfg.Auth, db, appCfg.Runtime, Version)
 	if err != nil {
 		log.Fatalf("failed to initialize api controller: %v", err)
 	}
@@ -76,9 +76,7 @@ func main() {
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		MaxAge:       12 * time.Hour,
 	}))
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"ok": true, "status": "up"})
-	})
+	router.GET("/health", api.HandleHealth)
 	api.RegisterRoutes(router)
 
 	httpServer := &http.Server{

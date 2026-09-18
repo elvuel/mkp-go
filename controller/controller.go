@@ -95,9 +95,19 @@ func (c *Controller) StopRecord() error {
 	return helper.StopRecord(c.sfport)
 }
 
+// helper func StopRecordContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error
+func (c *Controller) StopRecordContext(ctx context.Context) error {
+	return helper.StopRecordContext(ctx, c.sfport)
+}
+
 // helper func Alog(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) (string, error)
 func (c *Controller) Alog(logName string, opt *mkpgo.LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
 	return helper.Alog(c.sfport, logName, opt, opts...)
+}
+
+// helper func AlogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption) (string, error)
+func (c *Controller) AlogContext(ctx context.Context, logName string, opt *mkpgo.LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
+	return helper.AlogContext(ctx, c.sfport, logName, opt, opts...)
 }
 
 // helper func Astop(sfport *mkpgo.SFSerialPort) error
@@ -108,6 +118,11 @@ func (c *Controller) Astop(opts ...mkpgo.DirectiveOption) error {
 // helper func Cancel(sfport *mkpgo.SFSerialPort) error
 func (c *Controller) Cancel() error {
 	return helper.Cancel(c.sfport)
+}
+
+// helper func CancelContext(ctx context.Context, sfport *mkpgo.SFSerialPort) error
+func (c *Controller) CancelContext(ctx context.Context) error {
+	return helper.CancelContext(ctx, c.sfport)
 }
 
 // helper func Join(sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption, opts ...mkpgo.DirectiveOption) (string, error)
@@ -150,6 +165,11 @@ func (c *Controller) DeleteFile(path string, opts ...mkpgo.DirectiveOption) erro
 	return helper.DeleteFile(c.sfport, path, opts...)
 }
 
+// helper func DeleteFileContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string) error
+func (c *Controller) DeleteFileContext(ctx context.Context, path string, opts ...mkpgo.DirectiveOption) error {
+	return helper.DeleteFileContext(ctx, c.sfport, path, opts...)
+}
+
 // helper func Alive(sfport *mkpgo.SFSerialPort) (*mkpgo.Heartbeat, error)
 func (c *Controller) Alive(opts ...mkpgo.DirectiveOption) (*mkpgo.Heartbeat, error) {
 	return helper.Alive(c.sfport, opts...)
@@ -160,9 +180,19 @@ func (c *Controller) Atime(path string, opts ...mkpgo.DirectiveOption) (*mkpgo.L
 	return helper.Atime(c.sfport, path, opts...)
 }
 
+// helper func AtimeContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string) (*mkpgo.LogLength, error)
+func (c *Controller) AtimeContext(ctx context.Context, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogLength, error) {
+	return helper.AtimeContext(ctx, c.sfport, path, opts...)
+}
+
 // helper func Aversion(sfport *mkpgo.SFSerialPort) (*mkpgo.MKPVersion, error)
 func (c *Controller) Aversion(opts ...mkpgo.DirectiveOption) (*mkpgo.MKPVersion, error) {
 	return helper.Aversion(c.sfport, opts...)
+}
+
+// helper func AversionContext(ctx context.Context, sfport *mkpgo.SFSerialPort) (*mkpgo.MKPVersion, error)
+func (c *Controller) AversionContext(ctx context.Context, opts ...mkpgo.DirectiveOption) (*mkpgo.MKPVersion, error) {
+	return helper.AversionContext(ctx, c.sfport, opts...)
 }
 
 // helper func AUploadToMKP(sfport *mkpgo.SFSerialPort, opt *mkpgo.AGetOption, opts ...mkpgo.DirectiveOption) (string, error)
