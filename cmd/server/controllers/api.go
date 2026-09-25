@@ -885,7 +885,7 @@ func (a *API) isReplayBlockingLocked(now time.Time, recordID string) (bool, time
 		return false, 0
 	}
 	if !a.replayReleaseAt.IsZero() && now.Before(a.replayReleaseAt) {
-		return true, time.Until(a.replayReleaseAt)
+		return true, a.replayReleaseAt.Sub(now)
 	}
 	return false, 0
 }

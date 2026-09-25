@@ -11,6 +11,79 @@ import (
 	mkpgo "github.com/elvuel/mkp-go"
 )
 
+var errSyncOutputDisabled = errors.New("please enable sync mode first")
+
+func requireSyncOutputEnabled(sfport *mkpgo.SFSerialPort) error {
+	if !sfport.IsSyncOutputEnabled() {
+		return errSyncOutputDisabled
+	}
+
+	return nil
+}
+
+func parseDirectiveResult(sfport *mkpgo.SFSerialPort, directive, result string) (mkpgo.RawDirectiveOutputParser, string, error) {
+	parser := sfport.GetRawDirectiveOutputParser(directive)
+	if parser == nil {
+		return nil, "", mkpgo.ErrDirectiveParserMissing
+	}
+
+	parsedResult, err := parser.Parse(directive, result)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return parser, parsedResult, nil
+}
+
+func sendDirectiveParsedResult(ctx context.Context, sfport *mkpgo.SFSerialPort, directive string, opts ...mkpgo.DirectiveOption) (string, error) {
+	if err := requireSyncOutputEnabled(sfport); err != nil {
+		return "", err
+	}
+
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return "", err
+	}
+
+	_, parsedResult, err := parseDirectiveResult(sfport, directive, result)
+	return parsedResult, err
+}
+
+func sendDirectiveParsedOnly(ctx context.Context, sfport *mkpgo.SFSerialPort, directive string, opts ...mkpgo.DirectiveOption) error {
+	if err := requireSyncOutputEnabled(sfport); err != nil {
+		return err
+	}
+
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return err
+	}
+
+	_, _, err = parseDirectiveResult(sfport, directive, result)
+	return err
+}
+
+func sendDirectiveParsedJSON(ctx context.Context, sfport *mkpgo.SFSerialPort, directive string, target interface{}, opts ...mkpgo.DirectiveOption) error {
+	if err := requireSyncOutputEnabled(sfport); err != nil {
+		return err
+	}
+
+	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return err
+	}
+
+	parser, parsedResult, err := parseDirectiveResult(sfport, directive, result)
+	if err != nil {
+		return err
+	}
+	if !parser.IsJSONOutput() {
+		return mkpgo.ErrDirectiveParserMissing
+	}
+
+	return parser.UnmarshalTo(parsedResult, target)
+}
+
 func StopRecord(sfport *mkpgo.SFSerialPort) error {
 	return StopRecordContext(context.Background(), sfport)
 }
@@ -38,10 +111,6 @@ func Alog(sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption, opts
 }
 
 func AlogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, logName string, opt *mkpgo.LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
-	if !sfport.SyncOuputEnabled {
-		return "", errors.New("please enable sync mode first")
-	}
-
 	args := make([]string, 0)
 	args = append(args, logName)
 
@@ -52,26 +121,8 @@ func AlogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, logName string
 	directive := "alog " + strings.Join(args, " ")
 	fmt.Println(directive)
 
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
 	// log.Println("got ################ alog response:", result)
-
-	if err != nil {
-		return "", err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return "", err
-		}
-
-		return parsedResult, nil
-
-	}
-
-	return "", mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedResult(ctx, sfport, directive, opts...)
 }
 
 func Astop(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) error {
@@ -79,23 +130,7 @@ func Astop(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) error {
 }
 
 func AstopContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) error {
-	if !sfport.SyncOuputEnabled {
-		return errors.New("please enable sync mode first")
-	}
-	directive := "astop"
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
-		return err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		_, err := parser.Parse(directive, result)
-		return err
-	}
-
-	return mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedOnly(ctx, sfport, "astop", opts...)
 }
 
 func Cancel(sfport *mkpgo.SFSerialPort) error {
@@ -115,25 +150,12 @@ func Join(sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption, opts ...mkpgo.Direc
 // JoinContext connects the device to Wi-Fi using join directive with context.
 // JoinContext 使用 join 指令和 context 连接 Wi-Fi；opt 为 nil 或空时使用最近保存的 Wi-Fi 配置；opts 可覆盖本次同步等待设置。
 func JoinContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.JoinOption, opts ...mkpgo.DirectiveOption) (string, error) {
-	if !sfport.SyncOuputEnabled {
-		return "", errors.New("please enable sync mode first")
-	}
-
 	directive := "join"
 	if args := opt.CliArgs(); len(args) > 0 {
 		directive += " " + strings.Join(args, " ")
 	}
 
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-	if err != nil {
-		return "", err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		return parser.Parse(directive, result)
-	}
-
-	return "", mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedResult(ctx, sfport, directive, opts...)
 }
 
 // WifiAuto inspects or changes Wi-Fi auto-connect state using wifi_auto directive.
@@ -145,9 +167,6 @@ func WifiAuto(sfport *mkpgo.SFSerialPort, opt *mkpgo.WifiAutoOption, opts ...mkp
 // WifiAutoContext inspects or changes Wi-Fi auto-connect state using wifi_auto directive with context.
 // WifiAutoContext 使用 wifi_auto 指令和 context 查看或修改 Wi-Fi 自动连接状态；opt 为 nil 或空时查询当前状态。
 func WifiAutoContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.WifiAutoOption, opts ...mkpgo.DirectiveOption) (string, error) {
-	if !sfport.SyncOuputEnabled {
-		return "", errors.New("please enable sync mode first")
-	}
 	if opt != nil && opt.State != "" && opt.State != "1" && opt.State != "0" {
 		return "", errors.New("wifi_auto state must be \"1\" or \"0\"")
 	}
@@ -157,16 +176,7 @@ func WifiAutoContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo
 		directive += " " + strings.Join(args, " ")
 	}
 
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-	if err != nil {
-		return "", err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		return parser.Parse(directive, result)
-	}
-
-	return "", mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedResult(ctx, sfport, directive, opts...)
 }
 
 // DeviceSN 指令 返回设备序列号
@@ -176,33 +186,12 @@ func DeviceSN(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo
 
 // DeviceSNContext 指令 返回设备序列号
 func DeviceSNContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.SN, error) {
-	if !sfport.SyncOuputEnabled {
-		return nil, errors.New("please enable sync mode first")
-	}
-
-	directive := "sn"
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
+	sn := &mkpgo.SN{}
+	if err := sendDirectiveParsedJSON(ctx, sfport, "sn", sn, opts...); err != nil {
 		return nil, err
 	}
 
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if parser.IsJSONOutput() {
-			sn := &mkpgo.SN{}
-			err = parser.UnmarshalTo(parsedResult, sn)
-			return sn, err
-		}
-	}
-
-	return nil, mkpgo.ErrDirectiveParserMissing
+	return sn, nil
 }
 
 // ListDir 指令 返回路径下的所有子目录及文件
@@ -212,37 +201,15 @@ func ListDir(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOpt
 
 // ListDirContext 指令 返回路径下的所有子目录及文件
 func ListDirContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.FileSystem, error) {
-	if !sfport.SyncOuputEnabled {
-		return nil, errors.New("please enable sync mode first")
-	}
-
-	directive := "list_dir " + path
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
+	fssys := &mkpgo.FileSystem{}
+	if err := sendDirectiveParsedJSON(ctx, sfport, "list_dir "+path, fssys, opts...); err != nil {
 		return nil, err
 	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if parser.IsJSONOutput() {
-			fssys := &mkpgo.FileSystem{}
-			err = parser.UnmarshalTo(parsedResult, fssys)
-			if fssys.Error != "" {
-				return nil, errors.New(fssys.Error)
-			}
-			return fssys, err
-		}
-
+	if fssys.Error != "" {
+		return nil, errors.New(fssys.Error)
 	}
 
-	return nil, mkpgo.ErrDirectiveParserMissing
+	return fssys, nil
 }
 
 func ComposeLogDirctory(logDir string) string {
@@ -262,38 +229,7 @@ func CleanDirContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path strin
 		return errors.New("only can clean directory in working directory") // only can delete file within /eMMC/applog
 	}
 
-	if !sfport.SyncOuputEnabled {
-		return errors.New("please enable sync mode first")
-	}
-
-	directive := "clean_dir " + path
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
-		return err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		_, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return err
-		}
-
-		return nil
-
-		// if parser.IsJSONOutput() {
-		// 	fssys := &mkpgo.FileSystem{}
-		// 	err = parser.UnmarshalTo(parsedResult, fssys)
-		// 	if fssys.Error != "" {
-		// 		return nil, errors.New(fssys.Error)
-		// 	}
-		// 	return fssys, err
-		// }
-	}
-
-	return mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedOnly(ctx, sfport, "clean_dir "+path, opts...)
 }
 
 func ComposeLogFullpath(logPath string) string {
@@ -321,38 +257,7 @@ func DeleteFileContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path str
 		return errors.New("only can delete file in working directory") // only can delete file within /eMMC/applog
 	}
 
-	if !sfport.SyncOuputEnabled {
-		return errors.New("please enable sync mode first")
-	}
-
-	directive := "delete_file " + path
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
-		return err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		_, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return err
-		}
-
-		return nil
-
-		// if parser.IsJSONOutput() {
-		// 	fssys := &mkpgo.FileSystem{}
-		// 	err = parser.UnmarshalTo(parsedResult, fssys)
-		// 	if fssys.Error != "" {
-		// 		return nil, errors.New(fssys.Error)
-		// 	}
-		// 	return fssys, err
-		// }
-	}
-
-	return mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedOnly(ctx, sfport, "delete_file "+path, opts...)
 }
 
 // Alive 指令 心跳时间戳
@@ -362,37 +267,12 @@ func Alive(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.He
 
 // AliveContext 指令 心跳时间戳
 func AliveContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.Heartbeat, error) {
-	if !sfport.SyncOuputEnabled {
-		return nil, errors.New("please enable sync mode first")
-	}
-
-	directive := "alive"
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
+	hb := &mkpgo.Heartbeat{}
+	if err := sendDirectiveParsedJSON(ctx, sfport, "alive", hb, opts...); err != nil {
 		return nil, err
 	}
 
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if parser.IsJSONOutput() {
-			hb := &mkpgo.Heartbeat{}
-			err = parser.UnmarshalTo(parsedResult, hb)
-			if err != nil {
-				return nil, err
-			}
-			return hb, nil
-		}
-
-	}
-
-	return nil, mkpgo.ErrDirectiveParserMissing
+	return hb, nil
 }
 
 // Atime 指令 返回 日志时长。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
@@ -402,37 +282,12 @@ func Atime(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOptio
 
 // AtimeContext 指令 返回日志时长
 func AtimeContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogLength, error) {
-	if !sfport.SyncOuputEnabled {
-		return nil, errors.New("please enable sync mode first")
-	}
-
-	directive := "atime " + path
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
+	o := &mkpgo.LogLength{}
+	if err := sendDirectiveParsedJSON(ctx, sfport, "atime "+path, o, opts...); err != nil {
 		return nil, err
 	}
 
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if parser.IsJSONOutput() {
-			o := &mkpgo.LogLength{}
-			err = parser.UnmarshalTo(parsedResult, o)
-			if err != nil {
-				return nil, err
-			}
-			return o, nil
-		}
-
-	}
-
-	return nil, mkpgo.ErrDirectiveParserMissing
+	return o, nil
 }
 
 // Aversion 指令 返回 版本信息。
@@ -442,37 +297,12 @@ func Aversion(sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo
 
 // AversionContext 指令 返回版本信息。
 func AversionContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opts ...mkpgo.DirectiveOption) (*mkpgo.MKPVersion, error) {
-	if !sfport.SyncOuputEnabled {
-		return nil, errors.New("please enable sync mode first")
-	}
-
-	directive := "aversion"
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
+	o := &mkpgo.MKPVersion{}
+	if err := sendDirectiveParsedJSON(ctx, sfport, "aversion", o, opts...); err != nil {
 		return nil, err
 	}
 
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if parser.IsJSONOutput() {
-			o := &mkpgo.MKPVersion{}
-			err = parser.UnmarshalTo(parsedResult, o)
-			if err != nil {
-				return nil, err
-			}
-			return o, nil
-		}
-
-	}
-
-	return nil, mkpgo.ErrDirectiveParserMissing
+	return o, nil
 }
 
 // AUploadToMKP uploads a file-server file to the corresponding MKP path using aget directive.
@@ -484,24 +314,11 @@ func AUploadToMKP(sfport *mkpgo.SFSerialPort, opt *mkpgo.AGetOption, opts ...mkp
 // AUploadToMKPContext uploads a file-server file to the corresponding MKP path using aget directive with context.
 // AUploadToMKPContext 使用 aget 指令和 context 将文件服务器中的文件下载/上传到 MKP 对应路径。
 func AUploadToMKPContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.AGetOption, opts ...mkpgo.DirectiveOption) (string, error) {
-	if !sfport.SyncOuputEnabled {
-		return "", errors.New("please enable sync mode first")
-	}
 	if opt == nil || opt.FilePath == "" {
 		return "", errors.New("aget file path is required")
 	}
 
-	directive := "aget " + strings.Join(opt.CliArgs(), " ")
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-	if err != nil {
-		return "", err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		return parser.Parse(directive, result)
-	}
-
-	return "", mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedResult(ctx, sfport, "aget "+strings.Join(opt.CliArgs(), " "), opts...)
 }
 
 // ADownloadFromMKP downloads/uploads a MKP file to the corresponding file-server path using aput directive.
@@ -513,24 +330,11 @@ func ADownloadFromMKP(sfport *mkpgo.SFSerialPort, opt *mkpgo.APutOption, opts ..
 // ADownloadFromMKPContext downloads/uploads a MKP file to the corresponding file-server path using aput directive with context.
 // ADownloadFromMKPContext 使用 aput 指令和 context 将 MKP 文件下载/上传到文件服务器对应路径。
 func ADownloadFromMKPContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.APutOption, opts ...mkpgo.DirectiveOption) (string, error) {
-	if !sfport.SyncOuputEnabled {
-		return "", errors.New("please enable sync mode first")
-	}
 	if opt == nil || opt.FilePath == "" {
 		return "", errors.New("aput file path is required")
 	}
 
-	directive := "aput " + strings.Join(opt.CliArgs(), " ")
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-	if err != nil {
-		return "", err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		return parser.Parse(directive, result)
-	}
-
-	return "", mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedResult(ctx, sfport, "aput "+strings.Join(opt.CliArgs(), " "), opts...)
 }
 
 // AJSON2Log converts an adumj JSON file back to MKP log format using ajson2log directive.
@@ -542,9 +346,6 @@ func AJSON2Log(sfport *mkpgo.SFSerialPort, opt *mkpgo.AJSON2LogOption, opts ...m
 // AJSON2LogContext converts an adumj JSON file back to MKP log format using ajson2log directive with context.
 // AJSON2LogContext 使用 ajson2log 指令和 context 将 adumj JSON 文件转回 MKP log 格式。
 func AJSON2LogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.AJSON2LogOption, opts ...mkpgo.DirectiveOption) (string, error) {
-	if !sfport.SyncOuputEnabled {
-		return "", errors.New("please enable sync mode first")
-	}
 	if opt == nil || opt.JSONPath == "" {
 		return "", errors.New("ajson2log json path is required")
 	}
@@ -552,17 +353,7 @@ func AJSON2LogContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpg
 		return "", errors.New("ajson2log output log path is required")
 	}
 
-	directive := "ajson2log " + strings.Join(opt.CliArgs(), " ")
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-	if err != nil {
-		return "", err
-	}
-
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		return parser.Parse(directive, result)
-	}
-
-	return "", mkpgo.ErrDirectiveParserMissing
+	return sendDirectiveParsedResult(ctx, sfport, "ajson2log "+strings.Join(opt.CliArgs(), " "), opts...)
 }
 
 // AHTTPBase inspects or sets file-management API endpoint base URL using ahttpbase directive.
@@ -574,36 +365,17 @@ func AHTTPBase(sfport *mkpgo.SFSerialPort, opt *mkpgo.AHTTPBaseOption, opts ...m
 // AHTTPBaseContext inspects or sets file-management API endpoint base URL using ahttpbase directive with context.
 // AHTTPBaseContext 使用 ahttpbase 指令和 context 查看或设置文件管理服务器 API endpoint base URL。
 func AHTTPBaseContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.AHTTPBaseOption, opts ...mkpgo.DirectiveOption) (*mkpgo.AHTTPBase, error) {
-	if !sfport.SyncOuputEnabled {
-		return nil, errors.New("please enable sync mode first")
-	}
-
 	directive := "ahttpbase"
 	if args := opt.CliArgs(); len(args) > 0 {
 		directive += " " + strings.Join(args, " ")
 	}
 
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-	if err != nil {
+	base := &mkpgo.AHTTPBase{}
+	if err := sendDirectiveParsedJSON(ctx, sfport, directive, base, opts...); err != nil {
 		return nil, err
 	}
 
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-		if err != nil {
-			return nil, err
-		}
-		if parser.IsJSONOutput() {
-			base := &mkpgo.AHTTPBase{}
-			err = parser.UnmarshalTo(parsedResult, base)
-			if err != nil {
-				return nil, err
-			}
-			return base, nil
-		}
-	}
-
-	return nil, mkpgo.ErrDirectiveParserMissing
+	return base, nil
 }
 
 // Adumj dumps an action log as readable JSON using adumj directive.
@@ -615,35 +387,16 @@ func Adumj(sfport *mkpgo.SFSerialPort, opt *mkpgo.AdumjOption, opts ...mkpgo.Dir
 // AdumjContext dumps an action log as readable JSON using adumj directive with context.
 // AdumjContext 使用 adumj 指令和 context 将动作日志转储为便于解读的 JSON。
 func AdumjContext(ctx context.Context, sfport *mkpgo.SFSerialPort, opt *mkpgo.AdumjOption, opts ...mkpgo.DirectiveOption) (*mkpgo.ActionDump, error) {
-	if !sfport.SyncOuputEnabled {
-		return nil, errors.New("please enable sync mode first")
-	}
 	if opt == nil || opt.LogPath == "" {
 		return nil, errors.New("adumj log path is required")
 	}
 
-	directive := "adumj " + strings.Join(opt.CliArgs(), " ")
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-	if err != nil {
+	dump := &mkpgo.ActionDump{}
+	if err := sendDirectiveParsedJSON(ctx, sfport, "adumj "+strings.Join(opt.CliArgs(), " "), dump, opts...); err != nil {
 		return nil, err
 	}
 
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-		if err != nil {
-			return nil, err
-		}
-		if parser.IsJSONOutput() {
-			dump := &mkpgo.ActionDump{}
-			err = parser.UnmarshalTo(parsedResult, dump)
-			if err != nil {
-				return nil, err
-			}
-			return dump, nil
-		}
-	}
-
-	return nil, mkpgo.ErrDirectiveParserMissing
+	return dump, nil
 }
 
 // AInspect 指令 返回 日志基础信息。 path可以是相对路径(.log扩展 - mkpdemo/1129f40), 也可以是绝对路径(/eMMC/applog/mkpdemo/1129f40.log)
@@ -653,37 +406,12 @@ func AInspect(sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOp
 
 // AInspectContext 指令 返回日志基础信息。
 func AInspectContext(ctx context.Context, sfport *mkpgo.SFSerialPort, path string, opts ...mkpgo.DirectiveOption) (*mkpgo.LogInfo, error) {
-	if !sfport.SyncOuputEnabled {
-		return nil, errors.New("please enable sync mode first")
-	}
-
-	directive := "ainsp " + path
-
-	result, err := sfport.SendDirectiveContext(ctx, directive, opts...)
-
-	if err != nil {
+	o := &mkpgo.LogInfo{}
+	if err := sendDirectiveParsedJSON(ctx, sfport, "ainsp "+path, o, opts...); err != nil {
 		return nil, err
 	}
 
-	if parser := sfport.GetRawDirectiveOutputParser(directive); parser != nil {
-		parsedResult, err := parser.Parse(directive, result)
-
-		if err != nil {
-			return nil, err
-		}
-
-		if parser.IsJSONOutput() {
-			o := &mkpgo.LogInfo{}
-			err = parser.UnmarshalTo(parsedResult, o)
-			if err != nil {
-				return nil, err
-			}
-			return o, nil
-		}
-
-	}
-
-	return nil, mkpgo.ErrDirectiveParserMissing
+	return o, nil
 }
 
 // KeyDown presses one key using optional kpad settings.

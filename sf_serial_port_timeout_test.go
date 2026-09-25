@@ -212,6 +212,155 @@ func TestSendDirectiveContextSerializesSyncRequests(t *testing.T) {
 	}
 }
 
+func completeSyncDirective(t *testing.T, sp *SFSerialPort, wantDirective string, wantIgnored bool, output string) {
+	t.Helper()
+
+	gotDirective, gotIgnored, replyCh := sp.getSyncDirectiveState()
+	if gotDirective != wantDirective {
+		t.Fatalf("sync directive = %q, want %q", gotDirective, wantDirective)
+	}
+	if gotIgnored != wantIgnored {
+		t.Fatalf("sync output ignored = %t, want %t", gotIgnored, wantIgnored)
+	}
+	if replyCh == nil {
+		t.Fatal("sync reply channel is nil")
+	}
+
+	sp.deliverSyncOutput(output, replyCh)
+	sp.EmptySyncDirective()
+}
+
+func TestStartRecordingContextParsesDirectiveOutput(t *testing.T) {
+	sp := NewSFSerialPort()
+	sp.port = &stubSerialPort{writes: make(chan string, 1)}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- sp.StartRecordingContext(context.Background(), "demo.log")
+	}()
+
+	select {
+	case got := <-sp.port.(*stubSerialPort).writes:
+		if got != "alog demo.log\r\n" {
+			t.Fatalf("write = %q, want %q", got, "alog demo.log\\r\\n")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StartRecordingContext() did not write directive")
+	}
+
+	completeSyncDirective(t, sp, "alog", false, "alog demo.log\nstarted\n")
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("StartRecordingContext() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StartRecordingContext() did not return")
+	}
+}
+
+func TestStopRecordingContextParsesDirectiveOutput(t *testing.T) {
+	sp := NewSFSerialPort()
+	sp.port = &stubSerialPort{writes: make(chan string, 1)}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- sp.StopRecordingContext(context.Background())
+	}()
+
+	select {
+	case got := <-sp.port.(*stubSerialPort).writes:
+		if got != "astop\r\n" {
+			t.Fatalf("write = %q, want %q", got, "astop\\r\\n")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StopRecordingContext() did not write directive")
+	}
+
+	completeSyncDirective(t, sp, "astop", false, "astop\nstopped\n")
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("StopRecordingContext() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StopRecordingContext() did not return")
+	}
+}
+
+func TestCancelReplayContextParsesDirectiveOutput(t *testing.T) {
+	sp := NewSFSerialPort()
+	sp.port = &stubSerialPort{writes: make(chan string, 1)}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- sp.CancelReplayContext(context.Background())
+	}()
+
+	select {
+	case got := <-sp.port.(*stubSerialPort).writes:
+		if got != "acancel\r\n" {
+			t.Fatalf("write = %q, want %q", got, "acancel\\r\\n")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("CancelReplayContext() did not write directive")
+	}
+
+	completeSyncDirective(t, sp, "acancel", false, "acancel\ncancelled\n")
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("CancelReplayContext() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("CancelReplayContext() did not return")
+	}
+}
+
+func TestStartRecordingContextRequiresSyncOutput(t *testing.T) {
+	sp := NewSFSerialPort()
+	sp.DisableSyncOutput()
+
+	err := sp.StartRecordingContext(context.Background(), "demo.log")
+	if err == nil || err.Error() != "please enable sync mode first" {
+		t.Fatalf("StartRecordingContext() error = %v, want sync-mode error", err)
+	}
+}
+
+func TestMouse10ContextIgnoresOutputWithoutParser(t *testing.T) {
+	sp := NewSFSerialPort()
+	sp.port = &stubSerialPort{writes: make(chan string, 1)}
+
+	opt := NewM10Option().SetX(1).WithSyncIgnoreOutput(true)
+	done := make(chan error, 1)
+	go func() {
+		done <- sp.Mouse10Context(context.Background(), opt)
+	}()
+
+	select {
+	case got := <-sp.port.(*stubSerialPort).writes:
+		if got != "m10 --port 1 --x 1\r\n" {
+			t.Fatalf("write = %q, want %q", got, "m10 --port 1 --x 1\\r\\n")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Mouse10Context() did not write directive")
+	}
+
+	completeSyncDirective(t, sp, "m10 --port 1 --x 1", true, "")
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Mouse10Context() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Mouse10Context() did not return")
+	}
+}
+
 func TestReadLoopContextRetriesAfterTransientReadError(t *testing.T) {
 	sp := NewSFSerialPort()
 	sp.SyncOuputEnabled = false

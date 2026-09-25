@@ -158,6 +158,26 @@ func normalizeSFSyncDirective(directive string) string {
 	return directive
 }
 
+// sendDirectiveWithOutputParserContext sends one directive, waits for output, and validates it with the registered parser.
+func (sp *SFSerialPort) sendDirectiveWithOutputParserContext(ctx context.Context, directive string, opts ...DirectiveOption) error {
+	if !sp.IsSyncOutputEnabled() {
+		return errors.New("please enable sync mode first")
+	}
+
+	parser := sp.GetRawDirectiveOutputParser(directive)
+	if parser == nil {
+		return ErrDirectiveParserMissing
+	}
+
+	result, err := sp.SendDirectiveContext(ctx, directive, opts...)
+	if err != nil {
+		return err
+	}
+
+	_, err = parser.Parse(directive, result)
+	return err
+}
+
 // SendDirectiveAsync sends a directive without waiting for response.
 // SendDirectiveAsync 异步发送指令，不阻塞等待输出。
 func (sp *SFSerialPort) SendDirectiveAsync(directive string) error {
@@ -254,13 +274,15 @@ func (sp *SFSerialPort) StartRecording(args string) error {
 	return sp.StartRecordingContext(context.Background(), args)
 }
 
-// StartRecordingContext starts device-side log recording.
-// StartRecordingContext 启动设备端录制（alog），支持 context 取消。
+// StartRecordingContext starts device-side log recording and validates parsed output.
+// StartRecordingContext 启动设备端录制（alog），并校验解析后的输出；支持 context 取消。
 func (sp *SFSerialPort) StartRecordingContext(ctx context.Context, args string) error {
+	directive := "alog"
 	if args == "" {
-		return sp.SendDirectiveAsyncContext(ctx, "alog")
+		return sp.sendDirectiveWithOutputParserContext(ctx, directive)
 	}
-	return sp.SendDirectiveAsyncContext(ctx, "alog "+args)
+	directive += " " + args
+	return sp.sendDirectiveWithOutputParserContext(ctx, directive)
 }
 
 // StartReplaying starts replay from recorded log.
@@ -292,10 +314,10 @@ func (sp *SFSerialPort) StopRecording() error {
 	return sp.StopRecordingContext(context.Background())
 }
 
-// StopRecordingContext stops current recording session.
-// StopRecordingContext 停止当前录制任务，支持 context 取消。
+// StopRecordingContext stops current recording session and validates parsed output.
+// StopRecordingContext 停止当前录制任务，并校验解析后的输出；支持 context 取消。
 func (sp *SFSerialPort) StopRecordingContext(ctx context.Context) error {
-	return sp.SendDirectiveAsyncContext(ctx, "astop")
+	return sp.sendDirectiveWithOutputParserContext(ctx, "astop")
 }
 
 // Stop is an alias of StopRecording.
@@ -316,10 +338,10 @@ func (sp *SFSerialPort) CancelReplay() error {
 	return sp.CancelReplayContext(context.Background())
 }
 
-// CancelReplayContext cancels an ongoing replay task.
-// CancelReplayContext 取消当前回放任务，支持 context 取消。
+// CancelReplayContext cancels an ongoing replay task and validates parsed output.
+// CancelReplayContext 取消当前回放任务，并校验解析后的输出；支持 context 取消。
 func (sp *SFSerialPort) CancelReplayContext(ctx context.Context) error {
-	return sp.SendDirectiveAsyncContext(ctx, "acancel")
+	return sp.sendDirectiveWithOutputParserContext(ctx, "acancel")
 }
 
 // Mouse10 sends m10 (mouse) directive.
