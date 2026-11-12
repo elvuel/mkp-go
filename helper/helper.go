@@ -29,7 +29,7 @@ func parseDirectiveResult(sfport *mkpgo.SFSerialPort, directive, result string) 
 
 	parsedResult, err := parser.Parse(directive, result)
 	if err != nil {
-		return nil, "", err
+		return parser, parsedResult, sfport.WrapDirectiveDebugError("parse_failed", directive, result, &parsedResult, err)
 	}
 
 	return parser, parsedResult, nil
@@ -81,7 +81,10 @@ func sendDirectiveParsedJSON(ctx context.Context, sfport *mkpgo.SFSerialPort, di
 		return mkpgo.ErrDirectiveParserMissing
 	}
 
-	return parser.UnmarshalTo(parsedResult, target)
+	if err := parser.UnmarshalTo(parsedResult, target); err != nil {
+		return sfport.WrapDirectiveDebugError("parse_failed", directive, result, &parsedResult, err)
+	}
+	return nil
 }
 
 func StopRecord(sfport *mkpgo.SFSerialPort) error {

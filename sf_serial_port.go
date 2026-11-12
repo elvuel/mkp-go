@@ -130,9 +130,9 @@ func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive stri
 		replyCh := make(chan string, 1)
 		syncDirective := normalizeSFSyncDirective(directive)
 		if ignoreOutput {
-			sp.setSyncDirective(syncDirective, true, replyCh)
+			sp.setSyncDirectiveWithLabel(syncDirective, directive, true, replyCh)
 		} else {
-			sp.setSyncDirective(syncDirective, false, replyCh)
+			sp.setSyncDirectiveWithLabel(syncDirective, directive, false, replyCh)
 		}
 		_, err := sp.Write([]byte(directive + "\r\n"))
 		if err != nil {
@@ -143,7 +143,14 @@ func (sp *SFSerialPort) sendDirectiveContext(ctx context.Context, directive stri
 		}
 
 		sp.locker.Unlock()
-		return sp.waitSyncOutputContext(ctx, sp.resolveDirectiveSyncOutputTimeout(cfg), replyCh)
+		output, err := sp.waitSyncOutputContext(ctx, sp.resolveDirectiveSyncOutputTimeout(cfg), replyCh)
+		if err != nil {
+			if errors.Is(err, ErrSyncOutputTimeout) {
+				return "", sp.WrapDirectiveDebugError("timeout", directive, sp.pendingSyncBufferSnapshot(), nil, err)
+			}
+			return "", err
+		}
+		return output, nil
 	}
 
 	_, err := sp.Write([]byte(directive + "\r\n"))
@@ -174,7 +181,10 @@ func (sp *SFSerialPort) sendDirectiveWithOutputParserContext(ctx context.Context
 		return err
 	}
 
-	_, err = parser.Parse(directive, result)
+	parsedResult, err := parser.Parse(directive, result)
+	if err != nil {
+		return sp.WrapDirectiveDebugError("parse_failed", directive, result, &parsedResult, err)
+	}
 	return err
 }
 
@@ -239,7 +249,14 @@ func (sp *SFSerialPort) resolveDirectiveSyncOutputTimeout(opt DirectiveOptions) 
 }
 
 func (sp *SFSerialPort) getSyncOutputContext(ctx context.Context, timeout time.Duration) (string, error) {
-	return sp.waitSyncOutputContext(ctx, timeout, sp.currentSyncOutputChan())
+	output, err := sp.waitSyncOutputContext(ctx, timeout, sp.currentSyncOutputChan())
+	if err != nil {
+		if errors.Is(err, ErrSyncOutputTimeout) {
+			return "", sp.WrapDirectiveDebugError("timeout", sp.GetSyncDirective(), sp.pendingSyncBufferSnapshot(), nil, err)
+		}
+		return "", err
+	}
+	return output, nil
 }
 
 func (sp *SFSerialPort) waitSyncOutputContext(ctx context.Context, timeout time.Duration, waitCh chan string) (string, error) {

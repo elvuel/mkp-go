@@ -38,15 +38,20 @@ type SerialPort struct {
 
 	// Internal synchronization and sync-output state.
 	// 内部并发锁与同步输出状态。
-	locker            sync.Mutex
-	directiveMu       sync.Mutex
-	syncStateMu       sync.RWMutex
-	SyncDirective     string
-	SyncOuputEnabled  bool `json:"sync_output_enabled"`
-	SyncOutputChan    chan string
-	SyncOutputTimeout time.Duration `json:"sync_output_timeout"`
-	SyncOutputIgnored bool          `json:"-"`
-	syncReplyCh       chan string
+	locker             sync.Mutex
+	directiveMu        sync.Mutex
+	syncStateMu        sync.RWMutex
+	SyncDirective      string
+	SyncOuputEnabled   bool `json:"sync_output_enabled"`
+	SyncOutputChan     chan string
+	SyncOutputTimeout  time.Duration `json:"sync_output_timeout"`
+	SyncOutputIgnored  bool          `json:"-"`
+	syncReplyCh        chan string
+	syncDirectiveLabel string    `json:"-"`
+	pendingSyncBuffer  string    `json:"-"`
+	lastSyncDirective  string    `json:"-"`
+	lastSyncOutput     string    `json:"-"`
+	lastSyncOutputAt   time.Time `json:"-"`
 
 	// Async marker used to drop one unrelated echo frame.
 	// 异步标记用于跳过一帧无关回显数据。
@@ -97,6 +102,7 @@ func (sp *SerialPort) Open() error {
 	sp.port, err = serial.Open(sp.Name, sp.OpenMode)
 	if err == nil {
 		sp.readClosed = false
+		sp.clearPendingSyncBuffer()
 	}
 	return err
 }
@@ -115,6 +121,7 @@ func (sp *SerialPort) Close() error {
 	sp.port = nil
 	sp.readClosed = true
 	sp.EmptySyncDirective()
+	sp.clearPendingSyncBuffer()
 	sp.clearAsyncMark()
 	return err
 }
@@ -183,6 +190,7 @@ func (sp *SerialPort) Read() (string, error) {
 
 		if sp.consumeAsyncMark() {
 			resultCache = resultCache[:0]
+			sp.clearPendingSyncBuffer()
 			continue
 		}
 
@@ -192,6 +200,7 @@ func (sp *SerialPort) Read() (string, error) {
 		}
 
 		resultCache = append(resultCache, sp.readerBuf[:n]...)
+		sp.setPendingSyncBuffer(string(resultCache))
 
 		hittedIdx := bytes.Index(resultCache, []byte(syncDirective))
 		if hittedIdx < 0 {
@@ -212,11 +221,14 @@ func (sp *SerialPort) Read() (string, error) {
 			continue
 		}
 
+		capturedOutput := string(resultCache[hittedIdx : hittedIdx+outputCompletedIdx])
 		output := ""
 		if !syncOutputIgnored {
-			output = string(resultCache[hittedIdx : hittedIdx+outputCompletedIdx])
+			output = capturedOutput
 		}
 
+		sp.recordSyncOutput(syncDirective, capturedOutput)
+		sp.clearPendingSyncBuffer()
 		sp.deliverSyncOutput(output, syncReplyCh)
 		sp.EmptySyncDirective()
 		resultCache = resultCache[:0]
@@ -263,21 +275,29 @@ func (sp *SerialPort) ReadLoopContext(ctx context.Context) error {
 // SetSyncDirective sets the current sync directive token and captures output.
 // SetSyncDirective 设置当前等待匹配的同步指令标记，并捕获输出。
 func (sp *SerialPort) SetSyncDirective(directive string) {
-	sp.setSyncDirective(directive, false, nil)
+	sp.setSyncDirectiveWithLabel(directive, directive, false, nil)
 }
 
 // SetSyncDirectiveIgnoreOutput sets the current sync directive token and ignores its output.
 // SetSyncDirectiveIgnoreOutput 设置当前等待匹配的同步指令标记，但忽略输出内容。
 func (sp *SerialPort) SetSyncDirectiveIgnoreOutput(directive string) {
-	sp.setSyncDirective(directive, true, nil)
+	sp.setSyncDirectiveWithLabel(directive, directive, true, nil)
 }
 
 func (sp *SerialPort) setSyncDirective(directive string, ignoreOutput bool, replyCh chan string) {
+	sp.setSyncDirectiveWithLabel(directive, directive, ignoreOutput, replyCh)
+}
+
+func (sp *SerialPort) setSyncDirectiveWithLabel(directive, label string, ignoreOutput bool, replyCh chan string) {
 	sp.syncStateMu.Lock()
 	defer sp.syncStateMu.Unlock()
 	sp.SyncDirective = directive
 	sp.SyncOutputIgnored = ignoreOutput
 	sp.syncReplyCh = replyCh
+	sp.syncDirectiveLabel = label
+	if directive != "" {
+		sp.pendingSyncBuffer = ""
+	}
 }
 
 // GetSyncDirective gets current sync directive token.
@@ -295,15 +315,44 @@ func (sp *SerialPort) GetSyncDirectiveState() (string, bool) {
 }
 
 func (sp *SerialPort) getSyncDirectiveState() (string, bool, chan string) {
+	directive, ignored, replyCh, _ := sp.getSyncDirectiveSnapshot()
+	return directive, ignored, replyCh
+}
+
+func (sp *SerialPort) getSyncDirectiveSnapshot() (string, bool, chan string, string) {
 	sp.syncStateMu.RLock()
 	defer sp.syncStateMu.RUnlock()
-	return sp.SyncDirective, sp.SyncOutputIgnored, sp.syncReplyCh
+	return sp.SyncDirective, sp.SyncOutputIgnored, sp.syncReplyCh, sp.syncDirectiveLabel
 }
 
 // EmptySyncDirective clears sync directive token.
 // EmptySyncDirective 清空同步指令标记。
 func (sp *SerialPort) EmptySyncDirective() {
 	sp.setSyncDirective("", false, nil)
+}
+
+func (sp *SerialPort) setPendingSyncBuffer(buffer string) {
+	sp.syncStateMu.Lock()
+	defer sp.syncStateMu.Unlock()
+	sp.pendingSyncBuffer = buffer
+}
+
+func (sp *SerialPort) clearPendingSyncBuffer() {
+	sp.setPendingSyncBuffer("")
+}
+
+func (sp *SerialPort) pendingSyncBufferSnapshot() string {
+	sp.syncStateMu.RLock()
+	defer sp.syncStateMu.RUnlock()
+	return sp.pendingSyncBuffer
+}
+
+func (sp *SerialPort) recordSyncOutput(directive, output string) {
+	sp.syncStateMu.Lock()
+	defer sp.syncStateMu.Unlock()
+	sp.lastSyncDirective = directive
+	sp.lastSyncOutput = output
+	sp.lastSyncOutputAt = time.Now().UTC()
 }
 
 func (sp *SerialPort) currentSyncOutputChan() chan string {

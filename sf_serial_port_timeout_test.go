@@ -3,6 +3,8 @@ package mkpgo
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -72,6 +74,62 @@ func TestGetSyncOutputContextUsesProvidedTimeout(t *testing.T) {
 	}
 	if got := sp.GetSyncDirective(); got != "" {
 		t.Fatalf("GetSyncDirective() = %q, want cleared", got)
+	}
+}
+
+func TestSendDirectiveContextTimeoutWrapsDebugCapture(t *testing.T) {
+	t.Setenv("MKP_DEBUG_SERIAL_DIR", t.TempDir())
+	sp := NewSFSerialPort()
+	sp.SyncOutputTimeout = 20 * time.Millisecond
+	sp.port = &stubSerialPort{writes: make(chan string, 1)}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := sp.SendDirectiveContext(context.Background(), "alive")
+		done <- err
+	}()
+
+	select {
+	case got := <-sp.port.(*stubSerialPort).writes:
+		if got != "alive\r\n" {
+			t.Fatalf("write = %q, want %q", got, "alive\\r\\n")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SendDirectiveContext() did not write directive")
+	}
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrSyncOutputTimeout) {
+			t.Fatalf("SendDirectiveContext() error = %v, want %v", err, ErrSyncOutputTimeout)
+		}
+		var debugErr *SerialDebugError
+		if !errors.As(err, &debugErr) {
+			t.Fatalf("SendDirectiveContext() error = %T, want *SerialDebugError", err)
+		}
+		if debugErr.DebugPath == "" {
+			t.Fatal("SendDirectiveContext() debug path empty")
+		}
+		if !strings.Contains(debugErr.Error(), "serial summary:") {
+			t.Fatalf("SendDirectiveContext() error = %q, want serial summary", debugErr.Error())
+		}
+
+		content, readErr := os.ReadFile(debugErr.DebugPath)
+		if readErr != nil {
+			t.Fatalf("ReadFile(%q) error = %v", debugErr.DebugPath, readErr)
+		}
+		text := string(content)
+		if !strings.Contains(text, "[summary]") {
+			t.Fatalf("debug capture missing [summary]: %s", text)
+		}
+		if !strings.Contains(text, "directive: alive") {
+			t.Fatalf("debug capture missing directive metadata: %s", text)
+		}
+		if !strings.Contains(text, "[error]") {
+			t.Fatalf("debug capture missing [error]: %s", text)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SendDirectiveContext() did not return after timeout")
 	}
 }
 

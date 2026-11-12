@@ -2,6 +2,8 @@ package helper
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"testing"
 
 	mkpgo "github.com/elvuel/mkp-go"
@@ -79,5 +81,47 @@ func TestParseDirectiveResultPropagatesParserError(t *testing.T) {
 	_, _, err := parseDirectiveResult(sp, "wifi_auto", "wifi_auto\nCommand returned non-zero error code: 0x1 (ERROR)\n")
 	if !errors.Is(err, mkpgo.ErrRawDirecitveExecutionFailed) {
 		t.Fatalf("parseDirectiveResult() error = %v, want %v", err, mkpgo.ErrRawDirecitveExecutionFailed)
+	}
+}
+
+func TestParseDirectiveResultWrapsDebugCapture(t *testing.T) {
+	t.Setenv("MKP_DEBUG_SERIAL_DIR", t.TempDir())
+	sp := mkpgo.NewSFSerialPort()
+
+	_, _, err := parseDirectiveResult(sp, "wifi_auto", "wifi_auto\nnot-json\ncli>")
+	if !errors.Is(err, mkpgo.ErrRawDirectiveParseFailed) {
+		t.Fatalf("parseDirectiveResult() error = %v, want %v", err, mkpgo.ErrRawDirectiveParseFailed)
+	}
+
+	var debugErr *mkpgo.SerialDebugError
+	if !errors.As(err, &debugErr) {
+		t.Fatalf("parseDirectiveResult() error = %T, want *mkpgo.SerialDebugError", err)
+	}
+	if debugErr.DebugPath == "" {
+		t.Fatal("parseDirectiveResult() debug path empty")
+	}
+	if !strings.Contains(debugErr.Error(), "serial summary:") {
+		t.Fatalf("parseDirectiveResult() error = %q, want serial summary note", debugErr.Error())
+	}
+
+	content, readErr := os.ReadFile(debugErr.DebugPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%q) error = %v", debugErr.DebugPath, readErr)
+	}
+	text := string(content)
+	if !strings.Contains(text, "[summary]") {
+		t.Fatalf("debug capture missing [summary]: %s", text)
+	}
+	if !strings.Contains(text, "directive: wifi_auto") {
+		t.Fatalf("debug capture missing directive metadata: %s", text)
+	}
+	if !strings.Contains(text, "[raw_output]") {
+		t.Fatalf("debug capture missing [raw_output]: %s", text)
+	}
+	if !strings.Contains(text, "not-json") {
+		t.Fatalf("debug capture missing raw payload: %s", text)
+	}
+	if !strings.Contains(text, "[error]") {
+		t.Fatalf("debug capture missing [error]: %s", text)
 	}
 }

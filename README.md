@@ -136,6 +136,13 @@ err = sfport.Keypad(
 err = helper.KeypadReleaseAll(sfport)
 ```
 
+### 示例运行
+
+```powershell
+go run .\examples\m10
+go run .\examples\kpad
+```
+
 ### 录制与回放示例
 
 ```go
@@ -200,6 +207,7 @@ mkp-go 支持三类发送模式：
 - 文件删除/清理 helper 默认限制在 `/eMMC/applog` 下，避免误操作设备其他路径。
 - 默认串口配置来自 `NewSFSerialPort()`，实际使用时通常需要修改 `Name`、`VID`、`PID`、`SerialNum` 等字段。
 - 具体固件是否支持某个指令，以设备固件版本为准。
+- 同步超时或解析失败时，会自动写入串口调试快照到 `.mkp-debug/`；可通过环境变量 `MKP_DEBUG_SERIAL_DIR` 覆盖目录。
 
 ---
 
