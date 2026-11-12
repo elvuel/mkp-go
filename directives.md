@@ -1,6 +1,6 @@
-# MKP 指令帮助索引
+# MKP Go 指令帮助索引
 
-[English](./directives.en.md) | 中文
+[English](./directives.en.md) | 中文 | [README](./README.md)
 
 ---
 
@@ -10,6 +10,7 @@
 ## 目录
 
 - [使用约定](#使用约定)
+- [示例索引](#示例索引)
 - [快速总览](#快速总览)
 - [同步/异步发送规则](#同步异步发送规则)
 - [录制与回放指令](#录制与回放指令)
@@ -46,6 +47,29 @@ sn, err := helper.DeviceSN(sfport)
 fmt.Println(sn, err)
 ```
 
+## 示例索引
+
+下表沿用 README 的表格风格，整理当前独立 directive 示例。`aplay` 与 `acancel` 目前只有 API 说明，尚未提供单独 example。
+
+| 指令 | 源码路径 | 运行命令 | 示例行为 |
+|---|---|---|---|
+| `sn` | `examples/directives/sn/main.go` | `go run .\examples\directives\sn` | 查询设备序列号 |
+| `aversion` | `examples/directives/aversion/main.go` | `go run .\examples\directives\aversion` | 查询版本信息 |
+| `alive` | `examples/directives/alive/main.go` | `go run .\examples\directives\alive` | 查询在线状态 / 心跳 |
+| `list_dir` | `examples/directives/list_dir/main.go` | `go run .\examples\directives\list_dir` | 列出内置 `/eMMC` 目录 |
+| `clean_dir` | `examples/directives/clean_dir/main.go` | `go run .\examples\directives\clean_dir` | 清空 `/eMMC/applog/subdir1` |
+| `delete_file` | `examples/directives/delete_file/main.go` | `go run .\examples\directives\delete_file` | 删除 `/eMMC/applog/uuu3.log` |
+| `join` | `examples/directives/join/main.go` | `go run .\examples\directives\join [ssid password]` | 连接指定 Wi‑Fi；不带参数时使用已保存配置 |
+| `wifi_auto` | `examples/directives/wifi_auto/main.go` | `go run .\examples\directives\wifi_auto [0|1]` | 查询或设置 Wi‑Fi 自动连接 |
+| `ahttpbase` | `examples/directives/ahttpbase/main.go` | `go run .\examples\directives\ahttpbase [http-base-url]` | 查询或设置文件服务基地址 |
+| `ainsp` | `examples/directives/ainsp/main.go` | `go run .\examples\directives\ainsp` | 读取 `/eMMC/applog/uuu2.log` 基础信息 |
+| `atime` | `examples/directives/atime/main.go` | `go run .\examples\directives\atime` | 读取 `/eMMC/applog/uuu2.log` 时长 |
+| `adumj` | `examples/directives/adumj/main.go` | `go run .\examples\directives\adumj <logPath>` | 将设备日志转成动作 JSON |
+| `aget` | `examples/directives/aget/main.go` | `go run .\examples\directives\aget <file-server-path>` | 从 file server 拉取文件到 MKP |
+| `aput` | `examples/directives/aput/main.go` | `go run .\examples\directives\aput <mkp-file-path>` | 从 MKP 上传文件到 file server |
+| `ajson2log` | `examples/directives/ajson2log/main.go` | `go run .\examples\directives\ajson2log <jsonpath> <outputlogpath>` | 将 JSON 动作转回 MKP log |
+| `alog` | `examples/directives/alog/main.go` | `go run .\examples\directives\alog` | 以 `subdir1/test` 启动同步录制 |
+| `astop` | `examples/directives/astop/main.go` | `go run .\examples\directives\astop` | 停止当前录制 |
 ## 快速总览
 
 | 指令 | CLI 形式 | 说明 | Go API | 输出/解析 |
@@ -111,7 +135,7 @@ out, err = sfport.SendDirectiveContext(ctx, "alive") // 使用默认 SyncOutputT
 
 ## 录制与回放指令
 
-### `alog`：开始录制 / 获取录制输出
+### `alog`
 
 **CLI：**
 
@@ -148,7 +172,7 @@ out, err := helper.Alog(sfport, "demo", opt)
 - 结束标记：`cli>`。
 - 解析逻辑：清理 `\r`，去掉 CLI 前缀；有内容返回文本，无内容返回空字符串。
 
-### `aplay`：开始回放
+### `aplay`
 
 **CLI：**
 
@@ -172,7 +196,7 @@ err = sfport.StartReplayingContext(ctx, "demo", 100)
 
 **解析器：** 当前未注册内置解析器。`StartReplaying` 默认异步发送。
 
-### `astop`：停止录制
+### `astop`
 
 **CLI：**
 
@@ -195,7 +219,7 @@ err = helper.Astop(sfport)
 - 结束标记：`cli>`。
 - 解析逻辑：有内容返回文本；无内容返回 `ErrRawDirectiveParseFailed`。
 
-### `acancel`：取消回放
+### `acancel`
 
 **CLI：**
 
@@ -218,7 +242,7 @@ err = helper.Cancel(sfport)
 
 ## 设备、网络与文件系统指令
 
-### `sn`：获取序列号
+### `sn`
 
 **CLI：**
 
@@ -239,7 +263,7 @@ fmt.Println(sn.SN)
 {"sn":"..."}
 ```
 
-### `list_dir`：列出目录内容
+### `list_dir`
 
 **CLI：**
 
@@ -268,7 +292,7 @@ fs, err := helper.ListDir(sfport, "/eMMC/applog/mkpdemo")
 }
 ```
 
-### `clean_dir`：清空目录
+### `clean_dir`
 
 **CLI：**
 
@@ -293,7 +317,7 @@ err := helper.CleanDir(sfport, "/eMMC/applog/demo")
 - 结束标记：`cli>`。
 - 若输出包含 `Failed to`，返回 `failed to clean directory`。
 
-### `delete_file`：删除日志文件
+### `delete_file`
 
 **CLI：**
 
@@ -321,7 +345,7 @@ err := helper.DeleteFile(sfport, "demo/record1")
 - 结束标记：`cli>`。
 - 若输出包含 `Failed to remove`，返回 `failed to remove file`。
 
-### `join`：连接 Wi-Fi
+### `join`
 
 **CLI：**
 
@@ -399,7 +423,7 @@ I (736872) connect: Connected
 cli>
 ```
 
-### `wifi_auto`：查看/设置 Wi-Fi 自动连接
+### `wifi_auto`
 
 **CLI：**
 
@@ -468,7 +492,7 @@ wifi_auto 0
 cli>
 ```
 
-### `adumj`：日志转 JSON
+### `adumj`
 
 **CLI：**
 
@@ -523,7 +547,7 @@ Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
 
-### `aget`：从 file server 上传到 MKP
+### `aget`
 
 > 使用前需通过 `ahttpbase` 正确设置文件管理服务器 API endpoint base URL。
 
@@ -589,7 +613,7 @@ E (2970792) httpfile: Server returned status 404
 I (2970816) heh: HTTP_EVENT_DISCONNECTED
 cli>
 ```
-### `aput`：从 MKP 下载到 file server
+### `aput`
 
 > 使用前需通过 `ahttpbase` 正确设置文件管理服务器 API endpoint base URL。
 
@@ -649,7 +673,7 @@ Upload FAILED
 Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
-### `ajson2log`：将 adumj JSON 转回 MKP log
+### `ajson2log`
 
 **CLI：**
 
@@ -707,7 +731,7 @@ E (374939) ajson2log: Cannot open /eMMC/applog/jsons/aaaattt.json
 Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
-### `ahttpbase`：文件管理服务器 API endpoint base URL
+### `ahttpbase`
 
 **CLI：**
 
@@ -756,7 +780,7 @@ OK
 
 cli>
 ```
-### `alive`：心跳检测
+### `alive`
 
 **CLI：**
 
@@ -779,7 +803,7 @@ fmt.Println(hb.Timetamp)
 
 > 字段名按当前代码/固件使用 `timetamp`。
 
-### `atime`：获取日志时长
+### `atime`
 
 **CLI：**
 
@@ -802,7 +826,7 @@ length, err = helper.Atime(sfport, "/eMMC/applog/demo/record1.log")
 {"seconds": 1, "milsec": 230}
 ```
 
-### `aversion`：获取版本信息
+### `aversion`
 
 **CLI：**
 
@@ -823,7 +847,7 @@ fmt.Println(version.UVersion, version.AVersion)
 {"uver":"...", "aver":"..."}
 ```
 
-### `ainsp`：获取日志基础信息
+### `ainsp`
 
 **CLI：**
 
@@ -876,7 +900,7 @@ m10 --port <sp.MousePortFlag> ...
 | `--y <dy>` | `M10Option.Y` | 相对 Y 位移，代码注释范围 `-2048~2047`。 |
 | `--w <wheel>` | `M10Option.Wheel` | 滚轮位移，代码注释范围 `-128~127`。 |
 
-### 按键 bitmask
+### 按键位掩码
 
 | 名称 | 值 | 说明 |
 |---|---:|---|
@@ -1233,7 +1257,7 @@ type LogInfo struct {
 
 `mmm/mkp_directive260417.md` 中记录了两个建议指令；当前主代码中未注册解析器，也没有正式 Go wrapper。
 
-### `apause`：暂停回放
+### `apause`
 
 建议含义：暂停正在回放的 log。
 
@@ -1244,7 +1268,7 @@ type LogInfo struct {
 
 备注：暂停时保存 keyboard/mouse 状态，便于后续 resume。
 
-### `aresume`：恢复回放
+### `aresume`
 
 建议含义：恢复 log 回放。
 
@@ -1254,3 +1278,6 @@ type LogInfo struct {
 2. `useStates`：`1/0`；默认 `1`。`1` 表示恢复前使用 `apause` 保存的键鼠状态；`0` 表示直接恢复回放。
 
 备注：`apause` 保存的状态在 `alog`、`astop`、`acancel`、`aresume` 后直接清除。
+
+
+

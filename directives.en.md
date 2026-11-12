@@ -1,6 +1,6 @@
-# MKP Command Reference
+# MKP Go Command Reference
 
-English | [中文](./directives.md)
+English | [中文](./directives.md) | [README](./README.en.md)
 
 ---
 
@@ -10,6 +10,7 @@ English | [中文](./directives.md)
 ## Table of Contents
 
 - [Conventions](#conventions)
+- [Example Index](#example-index)
 - [Quick Overview](#quick-overview)
 - [Synchronous and Asynchronous Sending](#synchronous-and-asynchronous-sending)
 - [Recording and Replay Commands](#recording-and-replay-commands)
@@ -46,9 +47,32 @@ sn, err := helper.DeviceSN(sfport)
 fmt.Println(sn, err)
 ```
 
+## Example Index
+
+The table below follows the same README style and summarizes the standalone directive examples. `aplay` and `acancel` are documented at the API level, but do not yet have dedicated example programs.
+
+| Directive | Source path | Run command | Behavior |
+|---|---|---|---|
+| `sn` | `examples/directives/sn/main.go` | `go run .\examples\directives\sn` | Query the device serial number |
+| `aversion` | `examples/directives/aversion/main.go` | `go run .\examples\directives\aversion` | Query version information |
+| `alive` | `examples/directives/alive/main.go` | `go run .\examples\directives\alive` | Query liveness / heartbeat |
+| `list_dir` | `examples/directives/list_dir/main.go` | `go run .\examples\directives\list_dir` | List the built-in `/eMMC` directory |
+| `clean_dir` | `examples/directives/clean_dir/main.go` | `go run .\examples\directives\clean_dir` | Clean `/eMMC/applog/subdir1` |
+| `delete_file` | `examples/directives/delete_file/main.go` | `go run .\examples\directives\delete_file` | Delete `/eMMC/applog/uuu3.log` |
+| `join` | `examples/directives/join/main.go` | `go run .\examples\directives\join [ssid password]` | Connect to Wi‑Fi; without args it uses the saved configuration |
+| `wifi_auto` | `examples/directives/wifi_auto/main.go` | `go run .\examples\directives\wifi_auto [0|1]` | Query or set Wi‑Fi auto-connect |
+| `ahttpbase` | `examples/directives/ahttpbase/main.go` | `go run .\examples\directives\ahttpbase [http-base-url]` | Query or set the file-service base URL |
+| `ainsp` | `examples/directives/ainsp/main.go` | `go run .\examples\directives\ainsp` | Read basic info from `/eMMC/applog/uuu2.log` |
+| `atime` | `examples/directives/atime/main.go` | `go run .\examples\directives\atime` | Read duration from `/eMMC/applog/uuu2.log` |
+| `adumj` | `examples/directives/adumj/main.go` | `go run .\examples\directives\adumj <logPath>` | Convert a device log into action JSON |
+| `aget` | `examples/directives/aget/main.go` | `go run .\examples\directives\aget <file-server-path>` | Pull a file from the file server into MKP |
+| `aput` | `examples/directives/aput/main.go` | `go run .\examples\directives\aput <mkp-file-path>` | Upload a file from MKP to the file server |
+| `ajson2log` | `examples/directives/ajson2log/main.go` | `go run .\examples\directives\ajson2log <jsonpath> <outputlogpath>` | Convert action JSON back into MKP log format |
+| `alog` | `examples/directives/alog/main.go` | `go run .\examples\directives\alog` | Start synchronous recording with `subdir1/test` |
+| `astop` | `examples/directives/astop/main.go` | `go run .\examples\directives\astop` | Stop the current recording |
 ## Quick Overview
 
-| Command | CLI Form | Description | Go API | Output / Parser |
+| Directive | CLI Form | Description | Go API | Output / Parser |
 |---|---|---|---|---|
 | `alog` | `alog [logName] [options...]` | Start device-side recording; synchronous send can wait for recording output | `StartRecording` / `helper.StartRecord` / `helper.Alog` | Text, parser `RawDirective_alog` |
 | `aplay` | `aplay [logName] [--delay ms]` | Start replaying a recorded log | `StartReplaying` | No built-in parser; usually async |
@@ -74,7 +98,7 @@ fmt.Println(sn, err)
 
 ## Synchronous and Asynchronous Sending
 
-### Low-level send APIs
+### Low-Level Send APIs
 
 | API | Behavior |
 |---|---|
@@ -82,7 +106,7 @@ fmt.Println(sn, err)
 | `SendDirectiveIgnoreOutput(directive[, opts...])` / `SendDirectiveIgnoreOutputContext(ctx, directive[, opts...])` | Synchronous send, but only waits for completion and returns no output; optional `DirectiveOption` values override this wait. |
 | `SendDirectiveAsync(directive)` / `SendDirectiveAsyncContext(ctx, directive)` | Asynchronous send. It writes the command and does not wait for output. |
 
-### EOF markers
+### EOF Markers
 
 - Registered commands use their parser's `EOFFlag()`.
 - Unregistered commands use CLI prompt `cli>` as the default completion marker.
@@ -91,7 +115,7 @@ fmt.Println(sn, err)
   - `EOFCLI = "cli>"`
 - `alog` synchronous matching is normalized to `alog`, because actual output may not start with the full CLI text.
 
-### Sync output timeout
+### Sync Output Timeout
 
 - The default timeout is controlled by `SFSerialPort.SyncOutputTimeout`; `NewSFSerialPort()` defaults it to `10 * time.Second`.
 - `SendDirective` / `SendDirectiveContext` / `SendSyncDirective` / `SendSyncDirectiveContext` accept optional `DirectiveOption` values, such as `WithSyncOutputTimeout(timeout)`, that only override the current synchronous wait.
@@ -111,7 +135,7 @@ out, err = sfport.SendDirectiveContext(ctx, "alive") // uses default SyncOutputT
 
 ## Recording and Replay Commands
 
-### `alog`: start recording / get recording output
+### `alog`
 
 **CLI:**
 
@@ -148,7 +172,7 @@ out, err := helper.Alog(sfport, "demo", opt)
 - EOF marker: `cli>`.
 - Parsing behavior: removes `\r`, trims CLI prefix, returns text when non-empty; otherwise returns an empty string.
 
-### `aplay`: start replay
+### `aplay`
 
 **CLI:**
 
@@ -172,7 +196,7 @@ err = sfport.StartReplayingContext(ctx, "demo", 100)
 
 **Parser:** no built-in parser. `StartReplaying` sends asynchronously by default.
 
-### `astop`: stop recording
+### `astop`
 
 **CLI:**
 
@@ -195,7 +219,7 @@ err = helper.Astop(sfport)
 - EOF marker: `cli>`.
 - Parsing behavior: returns text when non-empty; empty content is treated as `ErrRawDirectiveParseFailed`.
 
-### `acancel`: cancel replay
+### `acancel`
 
 **CLI:**
 
@@ -218,7 +242,7 @@ err = helper.Cancel(sfport)
 
 ## Device, Network, and Filesystem Commands
 
-### `sn`: get serial number
+### `sn`
 
 **CLI:**
 
@@ -239,7 +263,7 @@ fmt.Println(sn.SN)
 {"sn":"..."}
 ```
 
-### `list_dir`: list directory contents
+### `list_dir`
 
 **CLI:**
 
@@ -268,7 +292,7 @@ fs, err := helper.ListDir(sfport, "/eMMC/applog/mkpdemo")
 }
 ```
 
-### `clean_dir`: clean a directory
+### `clean_dir`
 
 **CLI:**
 
@@ -293,7 +317,7 @@ err := helper.CleanDir(sfport, "/eMMC/applog/demo")
 - EOF marker: `cli>`.
 - If output contains `Failed to`, the parser returns `failed to clean directory`.
 
-### `delete_file`: delete a log file
+### `delete_file`
 
 **CLI:**
 
@@ -321,7 +345,7 @@ err := helper.DeleteFile(sfport, "demo/record1")
 - EOF marker: `cli>`.
 - If output contains `Failed to remove`, the parser returns `failed to remove file`.
 
-### `join`: connect Wi-Fi
+### `join`
 
 **CLI:**
 
@@ -399,7 +423,7 @@ I (736872) connect: Connected
 cli>
 ```
 
-### `wifi_auto`: inspect/set Wi-Fi auto-connect
+### `wifi_auto`
 
 **CLI:**
 
@@ -468,7 +492,7 @@ wifi_auto 0
 cli>
 ```
 
-### `adumj`: dump log as JSON
+### `adumj`
 
 **CLI:**
 
@@ -523,7 +547,7 @@ Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
 
-### `aget`: upload from file server to MKP
+### `aget`
 
 > `ahttpbase` must be configured correctly before using this command.
 
@@ -589,7 +613,7 @@ E (2970792) httpfile: Server returned status 404
 I (2970816) heh: HTTP_EVENT_DISCONNECTED
 cli>
 ```
-### `aput`: download from MKP to file server
+### `aput`
 
 > `ahttpbase` must be configured correctly before using this command.
 
@@ -649,7 +673,7 @@ Upload FAILED
 Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
-### `ajson2log`: convert adumj JSON back to MKP log
+### `ajson2log`
 
 **CLI:**
 
@@ -707,7 +731,7 @@ E (374939) ajson2log: Cannot open /eMMC/applog/jsons/aaaattt.json
 Command returned non-zero error code: 0xffffffff (ESP_FAIL)
 cli>
 ```
-### `ahttpbase`: file-management API endpoint base URL
+### `ahttpbase`
 
 **CLI:**
 
@@ -756,7 +780,7 @@ OK
 
 cli>
 ```
-### `alive`: heartbeat check
+### `alive`
 
 **CLI:**
 
@@ -779,7 +803,7 @@ fmt.Println(hb.Timetamp)
 
 > The field name is `timetamp` in the current code/firmware payload.
 
-### `atime`: get log duration
+### `atime`
 
 **CLI:**
 
@@ -802,7 +826,7 @@ length, err = helper.Atime(sfport, "/eMMC/applog/demo/record1.log")
 {"seconds": 1, "milsec": 230}
 ```
 
-### `aversion`: get version information
+### `aversion`
 
 **CLI:**
 
@@ -823,7 +847,7 @@ fmt.Println(version.UVersion, version.AVersion)
 {"uver":"...", "aver":"..."}
 ```
 
-### `ainsp`: inspect basic log information
+### `ainsp`
 
 **CLI:**
 
@@ -876,7 +900,7 @@ Default `MousePortFlag = "1"`.
 | `--y <dy>` | `M10Option.Y` | Relative Y movement. Code comment range: `-2048~2047`. |
 | `--w <wheel>` | `M10Option.Wheel` | Wheel delta. Code comment range: `-128~127`. |
 
-### Button bitmask
+### Button Bitmask
 
 | Name | Value | Description |
 |---|---:|---|
@@ -954,7 +978,7 @@ Default `KeyboardPortFlag = "2"`.
 | `--d <n>` | `KpadOption.Delay` | Command delay value. Code comment says seconds; normal default is `0`. |
 | `--v 1` | `KpadOption.Verbose=true` | Enable verbose output. |
 
-### Modifier keys
+### Modifier Keys
 
 | Name | Status bit |
 |---|---:|
@@ -1167,9 +1191,9 @@ type LogInfo struct {
 
 ## Go API Index
 
-### `SFSerialPort` command methods
+### `SFSerialPort` Directive Methods
 
-| Method | Command | Description |
+| Method | Directive | Description |
 |---|---|---|
 | `SendDirective` / `SendDirectiveContext` / `SendSyncDirective` / `SendSyncDirectiveContext` | Any | Synchronously send and return raw output; optional `DirectiveOption` values override this wait. |
 | `SendDirectiveIgnoreOutput` / `SendDirectiveIgnoreOutputContext` | Any | Synchronously send, wait for completion, and ignore output; optional `DirectiveOption` values override this wait. |
@@ -1183,11 +1207,11 @@ type LogInfo struct {
 | `MouseReleaseAll` / `MouseReleaseAllContext` | `m10 --b 0` | Release all mouse buttons. |
 | `Keypad` / `KeypadContext` | `kpad` | Send a keyboard command; `Async=false` waits synchronously and ignores output. |
 
-### `helper` package methods
+### `helper` Package Methods
 
 Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AUploadToMKP`, `ADownloadFromMKP`, `AJSON2Log`, `AHTTPBase`, `Adumj`, `DeviceSN`, `ListDir`, `CleanDir`, `DeleteFile`, `Alive`, `Atime`, `Aversion`, and `AInspect` all accept optional `mkpgo.DirectiveOption` values; use `mkpgo.WithSyncOutputTimeout(...)` to override the timeout for one wait.
 
-| Method | Command | Return |
+| Method | Directive | Return |
 |---|---|---|
 | `StartRecord` / `StartRecordContext` | `alog` | `error` |
 | `Alog` / `AlogContext` | `alog` | `string, error` |
@@ -1218,7 +1242,7 @@ Sync-output helpers such as `Alog`, `Astop`, `Join`, `WifiAuto`, `AUploadToMKP`,
 | `MouseReleaseAll` / `MouseReleaseAllContext` | `m10` | `error` |
 | `M10` | `m10` | `error` |
 
-### Common `controller.Controller` proxies
+### `controller.Controller` Common Proxies
 
 Matching sync-output proxy methods on `Controller` also accept optional `mkpgo.DirectiveOption` values.
 
@@ -1233,7 +1257,7 @@ Matching sync-output proxy methods on `Controller` also accept optional `mkpgo.D
 
 `mmm/mkp_directive260417.md` records two proposed commands. They currently have no registered parser and no formal Go wrapper in the main code.
 
-### `apause`: pause replay
+### `apause`
 
 Suggested behavior: pause the log currently being replayed.
 
@@ -1244,7 +1268,7 @@ Suggested parameters:
 
 Note: save keyboard/mouse states at pause time so that resume can restore them.
 
-### `aresume`: resume replay
+### `aresume`
 
 Suggested behavior: resume log replay.
 
@@ -1254,3 +1278,6 @@ Suggested parameters:
 2. `useStates`: `1/0`; default `1`. `1` means use states saved by `apause` before resuming; `0` means resume directly.
 
 Note: states saved by `apause` should be cleared after `alog`, `astop`, `acancel`, or `aresume`.
+
+
+
